@@ -49,17 +49,14 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Badge
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Flip
 import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -68,7 +65,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
@@ -86,6 +82,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -107,7 +104,6 @@ import androidx.core.content.FileProvider
 import com.example.model.A4GridPlan
 import com.example.model.DocumentDuplexMode
 import com.example.model.ItemType
-import com.example.model.PhotoDimension
 import com.example.model.PrintPhotoItem
 import com.example.util.BitmapProcessor
 import com.example.util.DocxExportHelper
@@ -124,9 +120,8 @@ fun MainStudioScreen() {
     // Queue of photos / documents
     val printItems = remember { mutableStateListOf<PrintPhotoItem>() }
 
-    // Active Tab: 0 = Queue & Settings, 1 = A4 Preview & Export
+    // Active Tab: 0 = Queue & Settings, 1 = A4 Multi-Page Word View
     var activeTabIndex by remember { mutableIntStateOf(0) }
-    var selectedPageIndex by remember { mutableIntStateOf(0) }
 
     // Dialog state for adding document
     var showAddTypeDialog by remember { mutableStateOf(false) }
@@ -154,7 +149,7 @@ fun MainStudioScreen() {
         contract = ActivityResultContracts.PickMultipleVisualMedia()
     ) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
-            uris.forEachIndexed { idx, uri ->
+            uris.forEach { uri ->
                 val bitmap = BitmapProcessor.loadBitmapFromUri(context, uri)
                 if (bitmap != null) {
                     val count = printItems.count { it.itemType == ItemType.PHOTO } + 1
@@ -174,7 +169,7 @@ fun MainStudioScreen() {
         }
     }
 
-    // Grid calculation
+    // Grid calculation (Calculates row wrapping and prevents photo/document overlap)
     val gridPlan = remember(printItems.toList()) {
         A4GridPlan.calculate(
             items = printItems,
@@ -183,29 +178,33 @@ fun MainStudioScreen() {
         )
     }
 
-    // A4 preview bitmap
-    var a4PreviewBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    // Rendered pages cache for multi-page Word-like vertical view
+    val pageBitmaps = remember { mutableStateMapOf<Int, Bitmap>() }
     var isRenderingPreview by remember { mutableStateOf(false) }
     var isExportingDocx by remember { mutableStateOf(false) }
 
-    LaunchedEffect(gridPlan, selectedPageIndex) {
+    LaunchedEffect(gridPlan) {
         if (printItems.isNotEmpty()) {
             isRenderingPreview = true
             scope.launch {
                 try {
-                    val pageIdx = selectedPageIndex.coerceIn(0, (gridPlan.totalPagesCount - 1).coerceAtLeast(0))
-                    val preview = BitmapProcessor.renderA4Sheet(
-                        plan = gridPlan,
-                        pageIndex = pageIdx,
-                        dpi = 150
-                    )
-                    a4PreviewBitmap = preview
+                    val newMap = mutableMapOf<Int, Bitmap>()
+                    for (pageIdx in 0 until gridPlan.totalPagesCount) {
+                        val preview = BitmapProcessor.renderA4Sheet(
+                            plan = gridPlan,
+                            pageIndex = pageIdx,
+                            dpi = 150
+                        )
+                        newMap[pageIdx] = preview
+                    }
+                    pageBitmaps.clear()
+                    pageBitmaps.putAll(newMap)
                 } finally {
                     isRenderingPreview = false
                 }
             }
         } else {
-            a4PreviewBitmap = null
+            pageBitmaps.clear()
         }
     }
 
@@ -235,7 +234,7 @@ fun MainStudioScreen() {
                             fontSize = 17.sp
                         )
                         Text(
-                            text = "ورق مقوى | هوامش 0.6 سم | مسافة 1 ملم | دعم المستندات وجهين",
+                            text = "ورق مقوى | هوامش 0.6 سم | مسافة 1 ملم | عرض متعدد الصفحات كملف Word",
                             color = Color(0xFF38BDF8),
                             fontSize = 11.sp
                         )
@@ -286,7 +285,7 @@ fun MainStudioScreen() {
                         onClick = { activeTabIndex = 1 },
                         text = {
                             Text(
-                                text = "معاينة ورقة A4 والطباعة (${gridPlan.totalPhotosCount})",
+                                text = "معاينة الملف والطباعة (${gridPlan.totalPagesCount} ورقة)",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -318,13 +317,11 @@ fun MainStudioScreen() {
                 }
             )
         } else {
-            A4PreviewTab(
+            A4WordMultiPageTab(
                 gridPlan = gridPlan,
-                previewBitmap = a4PreviewBitmap,
+                pageBitmaps = pageBitmaps,
                 isRendering = isRenderingPreview,
                 isExporting = isExportingDocx,
-                selectedPageIndex = selectedPageIndex,
-                onPageChange = { selectedPageIndex = it },
                 onExportDocx = {
                     if (!isExportingDocx) {
                         isExportingDocx = true
@@ -334,9 +331,16 @@ fun MainStudioScreen() {
                         }
                     }
                 },
-                onSaveA4HiRes = {
+                onSavePageHiRes = { pageIdx ->
                     scope.launch {
-                        saveA4HighResImage(context, gridPlan, selectedPageIndex)
+                        saveA4HighResImage(context, gridPlan, pageIdx)
+                    }
+                },
+                onSaveAllPagesHiRes = {
+                    scope.launch {
+                        for (p in 0 until gridPlan.totalPagesCount) {
+                            saveA4HighResImage(context, gridPlan, p)
+                        }
                     }
                 }
             )
@@ -425,7 +429,7 @@ fun PhotosListTab(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "يمكنك إضافة صور شخصية عادية أو مستندات (هوية، رخصة، بطاقة مع وجه أمامي وخلفي) لطباعتها بأعلى دقة على ورقة A4.",
+                        text = "يمكنك إضافة صور شخصية عادية أو مستندات (هوية، رخصة، بطاقة مع وجه أمامي وخلفي) لطباعتها بأعلى دقة على ورقة A4 دون أي تداخل.",
                         color = Color(0xFF94A3B8),
                         textAlign = TextAlign.Center,
                         fontSize = 12.sp,
@@ -482,7 +486,7 @@ fun PhotosListTab(
                             fontSize = 13.sp
                         )
                         Text(
-                            text = "هوامش 0.6 سم | مسافة 1 ملم | بدون خطوط مقطعة",
+                            text = "هوامش 0.6 سم | مسافة 1 ملم | بدون تداخل",
                             color = Color(0xFF38BDF8),
                             fontSize = 11.sp
                         )
@@ -493,7 +497,7 @@ fun PhotosListTab(
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("عرض ورقة A4")
+                        Text("عرض ملف الورق")
                         Spacer(modifier = Modifier.width(6.dp))
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowForward,
@@ -549,7 +553,7 @@ fun ItemCard(
                     )
                 }
 
-                // Explicitly separated Edit and Delete buttons (no overlap, minimum 12.dp spacing)
+                // Explicitly separated Edit and Delete buttons (no overlap, minimum 10.dp spacing)
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -583,10 +587,8 @@ fun ItemCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Thumbnails
                 if (item.itemType == ItemType.DOCUMENT) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        // Front face thumbnail
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Box(
                                 modifier = Modifier
@@ -602,7 +604,6 @@ fun ItemCard(
                             Text("أمامي", color = Color(0xFF94A3B8), fontSize = 10.sp)
                         }
 
-                        // Back face thumbnail
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Box(
                                 modifier = Modifier
@@ -634,7 +635,6 @@ fun ItemCard(
 
                 Spacer(modifier = Modifier.width(12.dp))
 
-                // Specs & Placement Info
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "القياس: ${item.dimensionDisplayText}",
@@ -646,7 +646,7 @@ fun ItemCard(
                     if (item.itemType == ItemType.DOCUMENT) {
                         Text(
                             text = if (item.duplexMode == DocumentDuplexMode.SAME_PAGE)
-                                "الوجهان بنفس الصفحة (0.6 سم من اليمين واليسار)"
+                                "الوجهان بنفس الصفحة (يمين ويسار ببعد 0.6 سم)"
                             else
                                 "الوجه الخلفي في ظهر الورقة (صفحة ثانية)",
                             color = Color(0xFF38BDF8),
@@ -662,7 +662,7 @@ fun ItemCard(
 
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    // Copies Stepper - Clean icons WITHOUT circles around + and -
+                    // Copies Stepper - Clean uncircled icons
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -673,7 +673,6 @@ fun ItemCard(
                             fontSize = 11.sp
                         )
 
-                        // Clean uncircled minus button
                         IconButton(
                             onClick = {
                                 if (item.copiesCount > 1) {
@@ -693,7 +692,6 @@ fun ItemCard(
                             modifier = Modifier.padding(horizontal = 4.dp)
                         )
 
-                        // Clean uncircled plus button
                         IconButton(
                             onClick = {
                                 onUpdate(item.copy(copiesCount = item.copiesCount + 1))
@@ -734,7 +732,6 @@ fun AddTypeChoiceDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Choice 1: Regular Photo
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -758,7 +755,6 @@ fun AddTypeChoiceDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Choice 2: Document / ID Card (Front & Back)
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -775,7 +771,7 @@ fun AddTypeChoiceDialog(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text("مستند / هوية (وجه أمامي وخلفي)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Text("وجهان بنفس الصفحة أو في ظهر الورقة (صفحة ثانية)", color = Color(0xFF94A3B8), fontSize = 11.sp)
+                            Text("يوضع بصف مستقل أسفل الصور وبمسافة 1 ملم", color = Color(0xFF94A3B8), fontSize = 11.sp)
                         }
                     }
                 }
@@ -798,12 +794,11 @@ fun AddDocumentDialog(
     val context = LocalContext.current
     var frontBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var backBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    var widthInput by remember { mutableStateOf("8.5") } // Default ID card width in cm
-    var heightInput by remember { mutableStateOf("5.4") } // Default ID card height in cm
+    var widthInput by remember { mutableStateOf("8.5") }
+    var heightInput by remember { mutableStateOf("5.4") }
     var copiesInput by remember { mutableStateOf("1") }
     var duplexMode by remember { mutableStateOf(DocumentDuplexMode.SAME_PAGE) }
 
-    // Pickers for front and back
     val pickFrontLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
@@ -841,12 +836,10 @@ fun AddDocumentDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Photos upload section (Front & Optional Back)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // Front Face Upload Card
                     Card(
                         modifier = Modifier
                             .weight(1f)
@@ -883,7 +876,6 @@ fun AddDocumentDialog(
                         }
                     }
 
-                    // Back Face Upload Card (Optional)
                     Card(
                         modifier = Modifier
                             .weight(1f)
@@ -933,7 +925,6 @@ fun AddDocumentDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Placement Options (Same Page vs Back Side)
                 Text(
                     text = "موضع الوجهين في الطباعة:",
                     color = Color.White,
@@ -944,7 +935,6 @@ fun AddDocumentDialog(
 
                 Spacer(modifier = Modifier.height(6.dp))
 
-                // Radio 1: Same Page
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -963,7 +953,6 @@ fun AddDocumentDialog(
                     }
                 }
 
-                // Radio 2: Back Side (Page 2)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -984,7 +973,6 @@ fun AddDocumentDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Dimensions Input with explicitly WHITE text color
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -1032,7 +1020,6 @@ fun AddDocumentDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Quick preset sizes chips
                 val docPresets = listOf(
                     Pair("بطاقة هوية (8.5×5.4)", Pair(8.5f, 5.4f)),
                     Pair("جواز سفر (12.5×8.8)", Pair(12.5f, 8.8f)),
@@ -1151,7 +1138,6 @@ fun EditPhotoDimensionDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Dimensions with explicitly WHITE text color
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -1292,100 +1278,110 @@ fun EditPhotoDimensionDialog(
     }
 }
 
+/**
+ * Multi-page vertical scrolling view displaying all A4 sheets smoothly like Microsoft Word
+ */
 @Composable
-fun A4PreviewTab(
+fun A4WordMultiPageTab(
     gridPlan: A4GridPlan,
-    previewBitmap: Bitmap?,
+    pageBitmaps: Map<Int, Bitmap>,
     isRendering: Boolean,
     isExporting: Boolean,
-    selectedPageIndex: Int,
-    onPageChange: (Int) -> Unit,
     onExportDocx: () -> Unit,
-    onSaveA4HiRes: () -> Unit
+    onSavePageHiRes: (Int) -> Unit,
+    onSaveAllPagesHiRes: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        // Multi-page selector (e.g. Page 1 Front, Page 2 Back for duplex documents)
-        if (gridPlan.totalPagesCount > 1) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+        if (isRendering && pageBitmaps.isEmpty()) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Color(0xFF38BDF8), modifier = Modifier.size(46.dp))
+            }
+        } else {
+            // Vertical scrolling view showing all pages of the document like Word
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(vertical = 12.dp)
             ) {
-                IconButton(
-                    onClick = {
-                        if (selectedPageIndex > 0) onPageChange(selectedPageIndex - 1)
-                    },
-                    enabled = selectedPageIndex > 0
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "الصفحة السابقة", tint = Color.White)
-                }
+                items(gridPlan.totalPagesCount) { pageIdx ->
+                    val bmp = pageBitmaps[pageIdx]
+                    val isBackPage = gridPlan.placedPhotos.any { it.isBackSide && it.pageIndex == pageIdx }
+                    val isFrontPage = gridPlan.placedPhotos.any { !it.isBackSide && it.pageIndex == pageIdx }
 
-                Surface(
-                    color = Color(0xFF1E293B),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.padding(horizontal = 12.dp)
-                ) {
-                    Text(
-                        text = "ورقة ${selectedPageIndex + 1} من أصل ${gridPlan.totalPagesCount}" +
-                                if (gridPlan.placedPhotos.any { it.isBackSide && it.pageIndex == selectedPageIndex }) " (الوجه الخلفي)" else " (الوجه الأمامي)",
-                        color = Color(0xFF38BDF8),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                    )
-                }
-
-                IconButton(
-                    onClick = {
-                        if (selectedPageIndex < gridPlan.totalPagesCount - 1) onPageChange(selectedPageIndex + 1)
-                    },
-                    enabled = selectedPageIndex < gridPlan.totalPagesCount - 1
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "الصفحة التالية", tint = Color.White)
-                }
-            }
-        }
-
-        // A4 Paper Viewport
-        Box(
-            modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            if (isRendering || previewBitmap == null) {
-                CircularProgressIndicator(color = Color(0xFF38BDF8), modifier = Modifier.size(42.dp))
-            } else {
-                BoxWithConstraints(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    val a4Ratio = 21.0f / 29.7f
-                    val containerRatio = maxWidth / maxHeight
-
-                    val frameModifier = if (a4Ratio > containerRatio) {
-                        Modifier.fillMaxWidth().aspectRatio(a4Ratio)
-                    } else {
-                        Modifier.fillMaxSize().aspectRatio(a4Ratio)
+                    val pageLabel = when {
+                        isBackPage && !isFrontPage -> "ورقة ${pageIdx + 1} من ${gridPlan.totalPagesCount} (الوجه الخلفي - Duplex)"
+                        !isBackPage && isFrontPage -> "ورقة ${pageIdx + 1} من ${gridPlan.totalPagesCount} (الوجه الأمامي)"
+                        else -> "ورقة ${pageIdx + 1} من ${gridPlan.totalPagesCount}"
                     }
 
-                    // A4 Sheet: clean solid white photo paper without dashed borders
-                    Card(
-                        modifier = frameModifier
-                            .shadow(16.dp, shape = RoundedCornerShape(4.dp))
-                            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(4.dp)),
-                        shape = RoundedCornerShape(4.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White)
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Image(
-                            bitmap = previewBitmap.asImageBitmap(),
-                            contentDescription = "معاينة صفحة A4 لورق الصور المقوى",
-                            modifier = Modifier.fillMaxSize()
-                        )
+                        // Page Header in Word style
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                color = if (isBackPage) Color(0xFF1E3A8A) else Color(0xFF0F766E),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text(
+                                    text = pageLabel,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                )
+                            }
+
+                            TextButton(
+                                onClick = { onSavePageHiRes(pageIdx) },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Icon(Icons.Default.Download, contentDescription = null, tint = Color(0xFF38BDF8), modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("حفظ هذه الورقة", color = Color(0xFF38BDF8), fontSize = 11.sp)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        // A4 Sheet: Standard 21.0 / 29.7 aspect ratio, solid white photo paper, no dashed borders
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(21.0f / 29.7f)
+                                .shadow(12.dp, shape = RoundedCornerShape(4.dp))
+                                .border(1.dp, Color(0xFFCBD5E1), RoundedCornerShape(4.dp)),
+                            shape = RoundedCornerShape(4.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White)
+                        ) {
+                            if (bmp != null) {
+                                Image(
+                                    bitmap = bmp.asImageBitmap(),
+                                    contentDescription = pageLabel,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    CircularProgressIndicator(color = Color(0xFF38BDF8), modifier = Modifier.size(32.dp))
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
 
-        // Bottom Controls Card
+        // Bottom Export Controls Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
@@ -1409,7 +1405,7 @@ fun A4PreviewTab(
                         shape = RoundedCornerShape(6.dp)
                     ) {
                         Text(
-                            text = "هوامش 0.6 سم | مسافة 1 ملم | 300 DPI",
+                            text = "${gridPlan.totalPagesCount} ورقة | هوامش 0.6 سم | مسافة 1 ملم",
                             color = Color(0xFF38BDF8),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
@@ -1435,7 +1431,7 @@ fun A4PreviewTab(
                         Icon(Icons.Default.Description, contentDescription = null, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "تصدير إلى ملف Word (.docx) - التفاف أمام النص",
+                            text = "تصدير إلى ملف Word (.docx) - التفاف أمام النص لكافة الصفحات",
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp
                         )
@@ -1444,21 +1440,21 @@ fun A4PreviewTab(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Secondary Export: Save High-Res A4 Image (300 DPI)
+                // Secondary Export: Save All Pages
                 OutlinedButton(
-                    onClick = onSaveA4HiRes,
-                    modifier = Modifier.fillMaxWidth().height(42.dp).testTag("save_hires_a4_btn"),
+                    onClick = onSaveAllPagesHiRes,
+                    modifier = Modifier.fillMaxWidth().height(42.dp).testTag("save_all_pages_btn"),
                     shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF38BDF8))
                 ) {
                     Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("حفظ صفحة A4 صورة فائقة الدقة (300 DPI - ورق مقوى)", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    Text("حفظ كافة أوراق الملف بدقة 300 DPI (ورق مقوى)", fontSize = 12.sp, fontWeight = FontWeight.Medium)
                 }
 
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "• تم استغلال مساحة الورقة كاملة مع هامش 0.6 سم ومسافة 1 ملم وبدون خطوط متقطعة لتسهيل القص والطباعة على ورق الصور المقوى.",
+                    text = "• تظهر جميع الصفحات بالتمرير الرأسي تماماً كملف Word، ويتم وضع المستندات بصفوف مستقلة أسفل الصور بمسافة 1 ملم.",
                     color = Color(0xFF94A3B8),
                     fontSize = 10.sp,
                     lineHeight = 14.sp
@@ -1490,7 +1486,7 @@ private suspend fun exportAndShareDocx(
             type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             putExtra(Intent.EXTRA_STREAM, uri)
             putExtra(Intent.EXTRA_SUBJECT, "شبكة صور ومستندات A4 لورق الصور المقوى")
-            putExtra(Intent.EXTRA_TEXT, "تم إنشاء ملف Word (.docx) لصفحة A4 بهامش 0.6 سم ومسافة 1 ملم والتفاف حر أمام النص.")
+            putExtra(Intent.EXTRA_TEXT, "تم إنشاء ملف Word (.docx) لصفحات A4 بهامش 0.6 سم ومسافة 1 ملم والتفاف حر أمام النص.")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
 
@@ -1507,16 +1503,16 @@ private suspend fun saveA4HighResImage(
     pageIndex: Int
 ) {
     try {
-        Toast.makeText(context, "جاري معالجة صفحة A4 بدقة 300 DPI لورق الصور المقوى...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "جاري معالجة ورقة ${pageIndex + 1} بدقة 300 DPI...", Toast.LENGTH_SHORT).show()
         val a4HiRes = BitmapProcessor.renderA4Sheet(
             plan = plan,
             pageIndex = pageIndex,
             dpi = 300
         )
 
-        val fileName = "PhotoGrid_A4_PhotoPaper_p${pageIndex + 1}_${System.currentTimeMillis()}.png"
+        val fileName = "PhotoGrid_A4_p${pageIndex + 1}_${System.currentTimeMillis()}.png"
         saveBitmapToGallery(context, a4HiRes, fileName)
-        Toast.makeText(context, "تم حفظ صفحة A4 بنجاح بأعلى دقة في مجلد الصور!", Toast.LENGTH_LONG).show()
+        Toast.makeText(context, "تم حفظ الورقة ${pageIndex + 1} بنجاح في مجلد الصور!", Toast.LENGTH_SHORT).show()
     } catch (e: Exception) {
         e.printStackTrace()
         Toast.makeText(context, "فشل الحفظ: ${e.message}", Toast.LENGTH_SHORT).show()

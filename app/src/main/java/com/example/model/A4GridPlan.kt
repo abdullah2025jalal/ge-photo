@@ -62,32 +62,49 @@ data class A4GridPlan(
             var photosInCurrentRow = 0
             var globalIndex = 0
 
-            // Separate handling for duplex documents and standard photos/same-page documents
+            // Helper to wrap the current photo row
+            fun flushCurrentPhotoRow() {
+                if (photosInCurrentRow > 0) {
+                    currentY += currentRowMaxHeight + spacingCm
+                    currentX = minX
+                    currentRowMaxHeight = 0f
+                    photosInCurrentRow = 0
+                }
+            }
+
             for (item in items) {
                 val w = item.widthCm.coerceAtLeast(1.0f)
                 val h = item.heightCm.coerceAtLeast(1.0f)
 
                 if (item.itemType == ItemType.DOCUMENT) {
+                    // Documents must ALWAYS start on a new row below any prior photos
+                    flushCurrentPhotoRow()
+
                     for (copy in 0 until item.copiesCount) {
                         if (item.duplexMode == DocumentDuplexMode.BACK_SIDE && item.hasBackFace) {
-                            // Duplex Mode: Front on Page 1, Back on Page 2 (Mirrored for back-to-back printing)
-                            // If remaining height on current front page is insufficient:
+                            // Duplex Mode: Front on currentPage, Back on (currentPage + 1)
+                            // Check if current Y fits on the page:
                             if ((currentY + h) > (maxY + 0.01f)) {
-                                currentPage += 2 // Advance by a pair of pages
+                                // Find highest page so far and advance
+                                val highestPage = placed.maxOfOrNull { it.pageIndex } ?: currentPage
+                                currentPage = if (highestPage % 2 == 0) highestPage + 2 else highestPage + 1
                                 currentX = minX
                                 currentY = minY
                                 currentRowMaxHeight = 0f
                                 photosInCurrentRow = 0
                             }
 
-                            // Place Front Face on currentPage
+                            val frontPage = currentPage
+                            val backPage = currentPage + 1
+
+                            // Front face on Front Page (0.6 cm from left)
                             val frontX = minX
                             placed.add(
                                 PlacedPhotoInstance(
                                     photoItem = item,
                                     isBackSide = false,
                                     instanceIndex = globalIndex++,
-                                    pageIndex = currentPage,
+                                    pageIndex = frontPage,
                                     xCm = frontX,
                                     yCm = currentY,
                                     widthCm = w,
@@ -95,15 +112,14 @@ data class A4GridPlan(
                                 )
                             )
 
-                            // Place Back Face on (currentPage + 1) at exact mirrored X position
-                            // For horizontal flip duplex, mirror position is: pageWidth - margin - w
+                            // Back face on Back Page (exact mirror position: 0.6 cm from right edge)
                             val backX = pageWidth - marginCm - w
                             placed.add(
                                 PlacedPhotoInstance(
                                     photoItem = item,
                                     isBackSide = true,
                                     instanceIndex = globalIndex++,
-                                    pageIndex = currentPage + 1,
+                                    pageIndex = backPage,
                                     xCm = backX,
                                     yCm = currentY,
                                     widthCm = w,
@@ -111,25 +127,24 @@ data class A4GridPlan(
                                 )
                             )
 
-                            // Advance Y for both pages
+                            // Advance row vertically for the next item on these pages
                             currentY += h + spacingCm
                             currentX = minX
                             currentRowMaxHeight = 0f
                             photosInCurrentRow = 0
 
                         } else {
-                            // Same Page Document Mode (Front on Right, Back on Left on the same row)
+                            // Same Page Document Mode: Front on Right (0.6cm from right), Back on Left (0.6cm from left)
                             if ((currentY + h) > (maxY + 0.01f)) {
-                                currentPage++
+                                currentPage = (placed.maxOfOrNull { it.pageIndex } ?: currentPage) + 1
                                 currentX = minX
                                 currentY = minY
                                 currentRowMaxHeight = 0f
                                 photosInCurrentRow = 0
                             }
 
-                            // If document has both faces:
                             if (item.hasBackFace) {
-                                // Left face: Back face at distance 0.6 cm from left margin
+                                // Left face: Back face at distance 0.6 cm from left edge
                                 val backX = minX
                                 placed.add(
                                     PlacedPhotoInstance(
@@ -144,7 +159,7 @@ data class A4GridPlan(
                                     )
                                 )
 
-                                // Right face: Front face at distance 0.6 cm from right margin
+                                // Right face: Front face at distance 0.6 cm from right edge
                                 val frontX = pageWidth - marginCm - w
                                 placed.add(
                                     PlacedPhotoInstance(
@@ -159,7 +174,7 @@ data class A4GridPlan(
                                     )
                                 )
                             } else {
-                                // Single face document
+                                // Single face document on the same page
                                 val frontX = pageWidth - marginCm - w
                                 placed.add(
                                     PlacedPhotoInstance(
@@ -175,6 +190,7 @@ data class A4GridPlan(
                                 )
                             }
 
+                            // Advance row vertically by document height + 1 mm spacing
                             currentY += h + spacingCm
                             currentX = minX
                             currentRowMaxHeight = 0f
@@ -182,20 +198,17 @@ data class A4GridPlan(
                         }
                     }
                 } else {
-                    // ItemType.PHOTO: Standard grid packing
+                    // ItemType.PHOTO: Standard photo grid
                     for (copy in 0 until item.copiesCount) {
                         val exceedsWidth = (currentX + w) > (maxX + 0.01f)
                         val reachesMaxFor3cm = (w <= 3.05f && photosInCurrentRow >= 6)
 
                         if (exceedsWidth || reachesMaxFor3cm) {
-                            currentX = minX
-                            currentY += currentRowMaxHeight + spacingCm
-                            currentRowMaxHeight = 0f
-                            photosInCurrentRow = 0
+                            flushCurrentPhotoRow()
                         }
 
                         if ((currentY + h) > (maxY + 0.01f)) {
-                            currentPage++
+                            currentPage = (placed.maxOfOrNull { it.pageIndex } ?: currentPage) + 1
                             currentX = minX
                             currentY = minY
                             currentRowMaxHeight = 0f

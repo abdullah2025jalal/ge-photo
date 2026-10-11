@@ -69,22 +69,41 @@ class ExampleUnitTest {
     }
 
     @Test
-    fun testDocumentSamePageLayout() {
-        // Document: 8.5 x 5.4 cm with front and back on same page
-        val docItem = PrintPhotoItem(
+    fun testPhotosAndDocumentNoOverlap() {
+        // Row 1: 6 photos of 3x4 cm
+        val photos = PrintPhotoItem(
+            name = "صور شخصية",
+            itemType = ItemType.PHOTO,
+            widthCm = 3.0f,
+            heightCm = 4.0f,
+            copiesCount = 6
+        )
+
+        // Row 2: Document 8.5x5.4 cm
+        val document = PrintPhotoItem(
             name = "بطاقة هوية",
             itemType = ItemType.DOCUMENT,
-            sourceBitmap = null,
-            backBitmap = null, // Will test with mock or flag
-            duplexMode = DocumentDuplexMode.SAME_PAGE,
             widthCm = 8.5f,
             heightCm = 5.4f,
             copiesCount = 1
         )
 
-        // Create with back face present:
-        // We can test both faces using reflection or placing directly
-        val plan = A4GridPlan.calculate(listOf(docItem))
-        assertEquals(1, plan.placedPhotos.size)
+        val plan = A4GridPlan.calculate(
+            items = listOf(photos, document),
+            marginCm = 0.6f,
+            spacingCm = 0.1f
+        )
+
+        // Total placed: 6 photos + 1 document = 7
+        assertEquals(7, plan.placedPhotos.size)
+
+        // Photos on row 1 must be at Y = 0.6 cm
+        val photosList = plan.placedPhotos.filter { it.photoItem.itemType == ItemType.PHOTO }
+        assertEquals(6, photosList.size)
+        photosList.forEach { assertEquals(0.6f, it.yCm, 0.01f) }
+
+        // Document MUST be below row 1: 0.6 + 4.0 + 0.1 = 4.7 cm
+        val docPlaced = plan.placedPhotos.first { it.photoItem.itemType == ItemType.DOCUMENT }
+        assertEquals(4.7f, docPlaced.yCm, 0.01f)
     }
 }

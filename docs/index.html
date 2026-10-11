@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>PhotoGrid Studio - استوديو طباعة شبكة الصور A4</title>
+  <meta name="description" content="استوديو طباعة شبكة الصور والمستندات على ورقة A4 لورق الصور المقوى وملفات Word">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <meta name="theme-color" content="#1E293B">
+  
+  <!-- Tailwind CSS & JSZip for client-side Word DOCX generation -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
+    * { font-family: 'Cairo', sans-serif; }
+    
+    /* Scrollbar styling */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #0F172A; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+
+    /* Print styles for A4 sheet */
+    @media print {
+      body * { visibility: hidden; }
+      #printArea, #printArea * { visibility: visible; }
+      #printArea { position: absolute; left: 0; top: 0; width: 100%; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col antialiased select-none">
+
+  <!-- ==================== PWA INSTALL RECTANGLE PROMPT (مستطيل تثبيت التطبيق) ==================== -->
+  <div id="installBanner" class="fixed inset-x-4 top-4 z-50 bg-gradient-to-r from-blue-700 via-sky-600 to-indigo-700 text-white rounded-2xl shadow-2xl p-4 border border-sky-400/30 flex items-center justify-between gap-4 animate-bounce-once">
+    <div class="flex items-center gap-3">
+      <img src="icon-192.png" alt="PhotoGrid Icon" class="w-12 h-12 rounded-xl shadow-md border border-white/20">
+      <div>
+        <h3 class="font-bold text-sm sm:text-base leading-tight">تثبيت تطبيق PhotoGrid Studio على جهازك</h3>
+        <p class="text-xs text-sky-100">تثبيت فوري كأيقونة على الشاشة الرئيسية بدون إنترنت</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button id="btnInstallApp" class="bg-white text-blue-800 font-bold px-4 py-2 rounded-xl text-xs sm:text-sm hover:bg-sky-50 transition shadow-lg">
+        تثبيت الآن
+      </button>
+      <button id="btnCloseInstall" class="text-white/80 hover:text-white p-1 rounded-lg">
+        ✕
+      </button>
+    </div>
+  </div>
+
+  <!-- ==================== APP HEADER ==================== -->
+  <header class="bg-slate-800 border-b border-slate-700 sticky top-0 z-40 shadow-lg">
+    <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <img src="icon-192.png" alt="Icon" class="w-10 h-10 rounded-xl shadow border border-slate-600">
+        <div>
+          <h1 class="font-extrabold text-base sm:text-lg text-white">استوديو طباعة شبكة الصور A4</h1>
+          <p class="text-xs text-sky-400">ورق مقوى | مسافة 1 ملم | هوامش 0.6 سم | عرض متعدد الصفحات</p>
+        </div>
+      </div>
+      <button id="btnOpenAddModal" class="bg-sky-600 hover:bg-sky-500 text-white font-bold px-3 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-1.5 shadow transition">
+        <span>+</span>
+        <span>إضافة عنصر</span>
+      </button>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="max-w-4xl mx-auto px-4 pb-2">
+      <div class="bg-slate-900 p-1 rounded-xl flex gap-1 text-xs sm:text-sm font-bold">
+        <button id="tabQueue" class="flex-1 py-2 rounded-lg text-center bg-slate-800 text-white shadow transition">
+          العناصر والقائمة (<span id="itemsBadgeCount">0</span>)
+        </button>
+        <button id="tabPreview" class="flex-1 py-2 rounded-lg text-center text-slate-400 hover:text-white transition">
+          معاينة الورق كملف Word (<span id="pagesBadgeCount">1</span> ورقة)
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== MAIN CONTENT AREA ==================== -->
+  <main class="flex-1 max-w-4xl w-full mx-auto p-4 flex flex-col">
+
+    <!-- TAB 1: ITEMS QUEUE -->
+    <section id="viewQueue" class="flex-1 flex flex-col">
+      <!-- Empty State -->
+      <div id="emptyState" class="my-auto py-12 px-4 text-center bg-slate-800/60 rounded-2xl border border-slate-700/60">
+        <div class="w-16 h-16 mx-auto mb-3 bg-sky-500/10 rounded-2xl flex items-center justify-center text-sky-400 text-3xl">
+          🖼️
+        </div>
+        <h2 class="text-lg font-bold text-white mb-1">لا توجد عناصر مضافة بعد</h2>
+        <p class="text-xs sm:text-sm text-slate-400 max-w-md mx-auto mb-4">
+          يمكنك إضافة صور شخصية (مثل 3×4 سم وتكرارها 6 بالسطر)، أو مستندات وهوية بوجهين (أمامي وخلفي) لطباعتها في صف مستقل أسفل الصور بمسافة 1 ملم دون أي تداخل.
+        </p>
+        <button onclick="document.getElementById('btnOpenAddModal').click()" class="bg-sky-600 hover:bg-sky-500 text-white font-bold px-5 py-2.5 rounded-xl text-sm inline-flex items-center gap-2 shadow">
+          <span>+</span>
+          <span>إضافة صورة أو مستند</span>
+        </button>
+      </div>
+
+      <!-- Items List -->
+      <div id="itemsContainer" class="space-y-3 hidden">
+        <!-- Rendered dynamically -->
+      </div>
+    </section>
+
+    <!-- TAB 2: MULTI-PAGE WORD PREVIEW -->
+    <section id="viewPreview" class="flex-1 flex flex-col hidden">
+      <div class="mb-3 flex items-center justify-between text-xs text-slate-400 px-1">
+        <span>تظهر الأوراق بالتمرير الرأسي تماماً كملف Word</span>
+        <span class="text-sky-400 font-bold bg-sky-950 px-2 py-0.5 rounded border border-sky-800">
+          هوامش 0.6 سم | مسافة 1 ملم | ورق مقوى 300 DPI
+        </span>
+      </div>
+
+      <!-- Scrollable Multi-Page Document Container -->
+      <div id="wordPagesScrollContainer" class="flex-1 space-y-6 overflow-y-auto pb-6">
+        <!-- Canvas pages rendered dynamically -->
+      </div>
+
+      <!-- Sticky Export Footer -->
+      <div class="sticky bottom-0 bg-slate-800/95 backdrop-blur p-4 rounded-2xl border border-slate-700 shadow-2xl mt-4">
+        <div class="flex flex-col sm:flex-row gap-2">
+          <button id="btnExportDocx" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg transition">
+            📄 <span>تصدير إلى ملف Word (.docx) - التفاف أمام النص</span>
+          </button>
+          <button id="btnSaveAllImages" class="bg-slate-700 hover:bg-slate-600 text-sky-300 font-bold py-3 px-4 rounded-xl text-sm flex items-center justify-center gap-2 transition">
+            💾 <span>حفظ كافة الأوراق (300 DPI)</span>
+          </button>
+          <button onclick="window.print()" class="bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 px-4 rounded-xl text-sm flex items-center justify-center gap-2 transition">
+            🖨️ <span>طباعة</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==================== MODAL: CHOOSE TYPE (صورة أم مستند) ==================== -->
+  <div id="modalChooseType" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-md w-full p-5 shadow-2xl">
+      <h3 class="text-base font-bold text-white mb-4 text-center">اختر نوع العنصر المراد إضافته</h3>
+      
+      <div class="space-y-3">
+        <!-- Option 1: Photo -->
+        <label class="block cursor-pointer bg-slate-900 hover:bg-slate-850 p-4 rounded-xl border border-sky-500/40 hover:border-sky-500 transition">
+          <input type="file" id="inputPhotoFiles" accept="image/*" multiple class="hidden">
+          <div class="flex items-center gap-3">
+            <span class="text-3xl">📷</span>
+            <div>
+              <h4 class="font-bold text-white text-sm">صورة شخصية / صور عادية</h4>
+              <p class="text-xs text-slate-400">تتكرر في صفوف شبكة A4 (مثل 3×4 سم، 6 صور بالسطر كحد أقصى)</p>
+            </div>
+          </div>
+        </label>
+
+        <!-- Option 2: Document -->
+        <div id="btnSelectDocumentType" class="cursor-pointer bg-slate-900 hover:bg-slate-850 p-4 rounded-xl border border-sky-500/40 hover:border-sky-500 transition">
+          <div class="flex items-center gap-3">
+            <span class="text-3xl">🪪</span>
+            <div>
+              <h4 class="font-bold text-white text-sm">مستند / هوية (وجه أمامي وخلفي)</h4>
+              <p class="text-xs text-slate-400">يوضع بصف مستقل أسفل الصور مع خيار الوجهان بنفس الصفحة أو بظهر الورقة</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-5 text-left">
+        <button onclick="closeModal('modalChooseType')" class="text-slate-400 hover:text-white text-sm font-semibold px-4 py-2">
+          إلغاء
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL: ADD DOCUMENT (مستند هوية بوجهين) ==================== -->
+  <div id="modalAddDocument" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-lg w-full p-5 shadow-2xl my-8">
+      <h3 class="text-base font-bold text-white mb-3 text-center">إضافة مستند أو هوية (وجه أمامي وخلفي)</h3>
+
+      <!-- Front and Back Pickers -->
+      <div class="grid grid-cols-2 gap-3 mb-4">
+        <!-- Front Face -->
+        <label class="cursor-pointer border-2 border-dashed border-sky-500/60 hover:border-sky-400 rounded-xl p-3 flex flex-col items-center justify-center text-center bg-slate-900 h-28 relative overflow-hidden">
+          <input type="file" id="inputDocFront" accept="image/*" class="hidden">
+          <img id="previewDocFront" class="absolute inset-0 w-full h-full object-cover hidden">
+          <div id="placeholderDocFront" class="text-center">
+            <span class="text-2xl">📸</span>
+            <div class="text-xs font-bold text-white mt-1">الوجه الأمامي</div>
+            <div class="text-[10px] text-sky-400">(مطلوب)</div>
+          </div>
+        </label>
+
+        <!-- Back Face -->
+        <label class="cursor-pointer border-2 border-dashed border-slate-600 hover:border-slate-500 rounded-xl p-3 flex flex-col items-center justify-center text-center bg-slate-900 h-28 relative overflow-hidden">
+          <input type="file" id="inputDocBack" accept="image/*" class="hidden">
+          <img id="previewDocBack" class="absolute inset-0 w-full h-full object-cover hidden">
+          <div id="placeholderDocBack" class="text-center">
+            <span class="text-2xl">🔄</span>
+            <div class="text-xs font-bold text-white mt-1">الوجه الخلفي</div>
+            <div class="text-[10px] text-slate-400">(اختياري)</div>
+          </div>
+        </label>
+      </div>
+
+      <!-- Placement Mode Options -->
+      <div class="bg-slate-900 p-3 rounded-xl border border-slate-700 mb-4 text-xs">
+        <div class="font-bold text-slate-200 mb-2">موضع الوجهين في الطباعة:</div>
+        <div class="space-y-2">
+          <label class="flex items-start gap-2 cursor-pointer">
+            <input type="radio" name="duplexOption" value="SAME_PAGE" checked class="mt-0.5 text-sky-500">
+            <div>
+              <div class="font-bold text-white">الوجهان بنفس الصفحة</div>
+              <div class="text-[11px] text-slate-400">الأمامي على اليمين والخلفي على اليسار (0.6 سم من حواف الورقة)</div>
+            </div>
+          </label>
+          <label class="flex items-start gap-2 cursor-pointer">
+            <input type="radio" name="duplexOption" value="BACK_SIDE" class="mt-0.5 text-sky-500">
+            <div>
+              <div class="font-bold text-white">الوجه الخلفي في ظهر الورقة (صفحة ثانية)</div>
+              <div class="text-[11px] text-slate-400">لطباعة الوجهين Duplex متطابقين ظهر لظهر بدقة</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Dimensions Inputs (with white text) -->
+      <div class="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label class="block text-xs text-sky-300 mb-1">العرض (سم):</label>
+          <input type="number" step="0.1" id="inputDocWidth" value="8.5" class="w-full bg-slate-900 text-white border border-slate-600 rounded-lg p-2 text-sm focus:border-sky-500 focus:outline-none">
+        </div>
+        <div>
+          <label class="block text-xs text-sky-300 mb-1">الارتفاع (سم):</label>
+          <input type="number" step="0.1" id="inputDocHeight" value="5.4" class="w-full bg-slate-900 text-white border border-slate-600 rounded-lg p-2 text-sm focus:border-sky-500 focus:outline-none">
+        </div>
+      </div>
+
+      <!-- Preset Chips -->
+      <div class="flex gap-1.5 mb-3 overflow-x-auto text-xs pb-1">
+        <button type="button" onclick="setDocPreset(8.5, 5.4)" class="bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-[11px] whitespace-nowrap">هوية (8.5×5.4)</button>
+        <button type="button" onclick="setDocPreset(12.5, 8.8)" class="bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-[11px] whitespace-nowrap">جواز (12.5×8.8)</button>
+        <button type="button" onclick="setDocPreset(14.8, 21.0)" class="bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-[11px] whitespace-nowrap">نصف ورقة A5</button>
+      </div>
+
+      <!-- Copies -->
+      <div class="mb-4">
+        <label class="block text-xs text-slate-300 mb-1">عدد النسخ المطلوبة:</label>
+        <input type="number" id="inputDocCopies" value="1" min="1" class="w-full bg-slate-900 text-white border border-slate-600 rounded-lg p-2 text-sm focus:border-sky-500 focus:outline-none">
+      </div>
+
+      <div class="flex justify-end gap-2">
+        <button onclick="closeModal('modalAddDocument')" class="text-slate-400 hover:text-white px-4 py-2 text-sm">إلغاء</button>
+        <button id="btnSaveDocument" class="bg-sky-600 hover:bg-sky-500 text-white font-bold px-4 py-2 rounded-xl text-sm shadow">إضافة المستند</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Print Container -->
+  <div id="printArea" class="hidden"></div>
+
+  <!-- ==================== JAVASCRIPT APPLICATION LOGIC ==================== -->
+  <script>
+    // State
+    const items = [];
+    let deferredInstallPrompt = null;
+    let docFrontBmp = null;
+    let docBackBmp = null;
+
+    // Service Worker Registration & PWA Install Prompt handling
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(err => console.log('SW reg fail', err));
+      });
+    }
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+      document.getElementById('installBanner').classList.remove('hidden');
+    });
+
+    document.getElementById('btnInstallApp').addEventListener('click', async () => {
+      if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        const choice = await deferredInstallPrompt.userChoice;
+        if (choice.outcome === 'accepted') {
+          document.getElementById('installBanner').classList.add('hidden');
+        }
+        deferredInstallPrompt = null;
+      } else {
+        alert('لتثبيت التطبيق على الشاشة الرئيسية:\n- على كروم/أندرويد: اضغط على القائمة (⋮) ثم "تثبيت التطبيق" أو "إضافة للشاشة الرئيسية".\n- على آيفون: اضغط زر المشاركة ثم "Add to Home Screen".');
+      }
+    });
+
+    document.getElementById('btnCloseInstall').addEventListener('click', () => {
+      document.getElementById('installBanner').classList.add('hidden');
+    });
+
+    // Navigation Tabs
+    const tabQueue = document.getElementById('tabQueue');
+    const tabPreview = document.getElementById('tabPreview');
+    const viewQueue = document.getElementById('viewQueue');
+    const viewPreview = document.getElementById('viewPreview');
+
+    tabQueue.addEventListener('click', () => {
+      tabQueue.className = 'flex-1 py-2 rounded-lg text-center bg-slate-800 text-white shadow transition';
+      tabPreview.className = 'flex-1 py-2 rounded-lg text-center text-slate-400 hover:text-white transition';
+      viewQueue.classList.remove('hidden');
+      viewPreview.classList.add('hidden');
+    });
+
+    tabPreview.addEventListener('click', () => {
+      tabPreview.className = 'flex-1 py-2 rounded-lg text-center bg-slate-800 text-white shadow transition';
+      tabQueue.className = 'flex-1 py-2 rounded-lg text-center text-slate-400 hover:text-white transition';
+      viewQueue.classList.add('hidden');
+      viewPreview.classList.remove('hidden');
+      renderMultiPageWordView();
+    });
+
+    // Modals
+    function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+    function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+    document.getElementById('btnOpenAddModal').addEventListener('click', () => openModal('modalChooseType'));
+    document.getElementById('btnSelectDocumentType').addEventListener('click', () => {
+      closeModal('modalChooseType');
+      openModal('modalAddDocument');
+    });
+
+    // Photo input handling
+    document.getElementById('inputPhotoFiles').addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files);
+      for (const file of files) {
+        const bmp = await loadImage(file);
+        items.push({
+          id: 'item_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+          name: 'صورة ' + (items.filter(i => i.type === 'PHOTO').length + 1),
+          type: 'PHOTO',
+          sourceBitmap: bmp,
+          widthCm: 3.0,
+          heightCm: 4.0,
+          copiesCount: 6
+        });
+      }
+      closeModal('modalChooseType');
+      renderItemsQueue();
+    });
+
+    // Document input handling
+    document.getElementById('inputDocFront').addEventListener('change', async (e) => {
+      if (e.target.files[0]) {
+        docFrontBmp = await loadImage(e.target.files[0]);
+        document.getElementById('previewDocFront').src = docFrontBmp.src;
+        document.getElementById('previewDocFront').classList.remove('hidden');
+        document.getElementById('placeholderDocFront').classList.add('hidden');
+      }
+    });
+
+    document.getElementById('inputDocBack').addEventListener('change', async (e) => {
+      if (e.target.files[0]) {
+        docBackBmp = await loadImage(e.target.files[0]);
+        document.getElementById('previewDocBack').src = docBackBmp.src;
+        document.getElementById('previewDocBack').classList.remove('hidden');
+        document.getElementById('placeholderDocBack').classList.add('hidden');
+      }
+    });
+
+    window.setDocPreset = function(w, h) {
+      document.getElementById('inputDocWidth').value = w;
+      document.getElementById('inputDocHeight').value = h;
+    };
+
+    document.getElementById('btnSaveDocument').addEventListener('click', () => {
+      if (!docFrontBmp) {
+        alert('يرجى اختيار صورة الوجه الأمامي للمستند');
+        return;
+      }
+      const w = parseFloat(document.getElementById('inputDocWidth').value) || 8.5;
+      const h = parseFloat(document.getElementById('inputDocHeight').value) || 5.4;
+      const c = parseInt(document.getElementById('inputDocCopies').value) || 1;
+      const duplex = document.querySelector('input[name="duplexOption"]:checked').value;
+
+      items.push({
+        id: 'doc_' + Date.now(),
+        name: `مستند ${w}×${h} سم`,
+        type: 'DOCUMENT',
+        sourceBitmap: docFrontBmp,
+        backBitmap: docBackBmp,
+        duplexMode: duplex,
+        widthCm: w,
+        heightCm: h,
+        copiesCount: c
+      });
+
+      // Reset dialog
+      docFrontBmp = null;
+      docBackBmp = null;
+      document.getElementById('previewDocFront').classList.add('hidden');
+      document.getElementById('previewDocBack').classList.add('hidden');
+      document.getElementById('placeholderDocFront').classList.remove('hidden');
+      document.getElementById('placeholderDocBack').classList.remove('hidden');
+      closeModal('modalAddDocument');
+      renderItemsQueue();
+    });
+
+    function loadImage(file) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.src = URL.createObjectURL(file);
+      });
+    }
+
+    // Render Queue
+    function renderItemsQueue() {
+      const container = document.getElementById('itemsContainer');
+      const empty = document.getElementById('emptyState');
+      document.getElementById('itemsBadgeCount').textContent = items.length;
+
+      if (items.length === 0) {
+        container.classList.add('hidden');
+        empty.classList.remove('hidden');
+        return;
+      }
+
+      container.classList.remove('hidden');
+      empty.classList.add('hidden');
+      container.innerHTML = '';
+
+      items.forEach((item, index) => {
+        const card = document.createElement('div');
+        card.className = 'bg-slate-800 border border-slate-700 rounded-2xl p-4 flex flex-col gap-3 shadow';
+        
+        const isDoc = item.type === 'DOCUMENT';
+        card.innerHTML = `
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="text-xs px-2 py-0.5 rounded font-bold ${isDoc ? 'bg-blue-900 text-blue-200' : 'bg-teal-900 text-teal-200'}">
+                ${isDoc ? 'مستند / هوية' : 'صورة عادية'}
+              </span>
+              <span class="font-bold text-white text-sm">${item.name}</span>
+            </div>
+            <!-- SEPARATED DELETE BUTTON -->
+            <button onclick="deleteItem(${index})" class="bg-red-950/80 hover:bg-red-900 text-red-400 p-2 rounded-lg text-xs flex items-center gap-1 transition">
+              🗑️ <span>حذف</span>
+            </button>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <div class="w-16 h-12 bg-black rounded-lg overflow-hidden flex items-center justify-center border border-slate-700">
+              <img src="${item.sourceBitmap.src}" class="w-full h-full object-cover">
+            </div>
+            <div class="flex-1 text-xs">
+              <div class="text-slate-200 font-bold">${item.widthCm} × ${item.heightCm} سم</div>
+              <div class="text-sky-400 mt-0.5">
+                ${isDoc ? (item.duplexMode === 'SAME_PAGE' ? 'الوجهان بنفس الصفحة' : 'الوجه الخلفي بالصفحة الثانية') : (item.widthCm <= 3.05 ? '6 صور بالسطر كحد أقصى' : 'أبعاد خاصة')}
+              </div>
+            </div>
+            <!-- COPIES STEPPER WITHOUT CIRCLES -->
+            <div class="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-700">
+              <span class="text-xs text-slate-400">النسخ:</span>
+              <button onclick="updateCopies(${index}, -1)" class="text-slate-300 hover:text-white font-extrabold text-base px-1.5">－</button>
+              <span class="font-bold text-sky-400 text-sm">${item.copiesCount}</span>
+              <button onclick="updateCopies(${index}, 1)" class="text-sky-400 hover:text-sky-300 font-extrabold text-base px-1.5">＋</button>
+            </div>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    window.updateCopies = function(idx, delta) {
+      items[idx].copiesCount = Math.max(1, items[idx].copiesCount + delta);
+      renderItemsQueue();
+    };
+
+    window.deleteItem = function(idx) {
+      items.splice(idx, 1);
+      renderItemsQueue();
+    };
+
+    // ==================== A4 GRID LAYOUT ENGINE (Calculates without overlap) ====================
+    function calculateA4Plan() {
+      const pageWidth = 21.0;
+      const pageHeight = 29.7;
+      const margin = 0.6;
+      const spacing = 0.1;
+
+      const maxX = pageWidth - margin;
+      const maxY = pageHeight - margin;
+
+      const placed = [];
+      let currentPage = 0;
+      let currentX = margin;
+      let currentY = margin;
+      let currentRowMaxHeight = 0;
+      let photosInRow = 0;
+      let globalIndex = 0;
+
+      function flushPhotoRow() {
+        if (photosInRow > 0) {
+          currentY += currentRowMaxHeight + spacing;
+          currentX = margin;
+          currentRowMaxHeight = 0;
+          photosInRow = 0;
+        }
+      }
+
+      for (const item of items) {
+        const w = Math.max(1.0, item.widthCm);
+        const h = Math.max(1.0, item.heightCm);
+
+        if (item.type === 'DOCUMENT') {
+          flushPhotoRow(); // Document starts on a fresh row below prior photos!
+
+          for (let c = 0; c < item.copiesCount; c++) {
+            if (item.duplexMode === 'BACK_SIDE' && item.backBitmap) {
+              if (currentY + h > maxY + 0.01) {
+                const highest = placed.reduce((max, p) => Math.max(max, p.pageIndex), currentPage);
+                currentPage = (highest % 2 === 0) ? highest + 2 : highest + 1;
+                currentX = margin;
+                currentY = margin;
+                currentRowMaxHeight = 0;
+                photosInRow = 0;
+              }
+
+              // Front Face on Page 1
+              placed.push({
+                item, isBack: false, pageIndex: currentPage,
+                x: margin, y: currentY, w, h, index: globalIndex++
+              });
+              // Back Face on Page 2 (mirrored 0.6cm from right edge)
+              placed.push({
+                item, isBack: true, pageIndex: currentPage + 1,
+                x: pageWidth - margin - w, y: currentY, w, h, index: globalIndex++
+              });
+
+              currentY += h + spacing;
+              currentX = margin;
+            } else {
+              // Same Page Document
+              if (currentY + h > maxY + 0.01) {
+                currentPage = placed.reduce((max, p) => Math.max(max, p.pageIndex), currentPage) + 1;
+                currentX = margin;
+                currentY = margin;
+                currentRowMaxHeight = 0;
+                photosInRow = 0;
+              }
+
+              if (item.backBitmap) {
+                // Back on Left (0.6cm from left edge)
+                placed.push({
+                  item, isBack: true, pageIndex: currentPage,
+                  x: margin, y: currentY, w, h, index: globalIndex++
+                });
+                // Front on Right (0.6cm from right edge)
+                placed.push({
+                  item, isBack: false, pageIndex: currentPage,
+                  x: pageWidth - margin - w, y: currentY, w, h, index: globalIndex++
+                });
+              } else {
+                // Single face
+                placed.push({
+                  item, isBack: false, pageIndex: currentPage,
+                  x: pageWidth - margin - w, y: currentY, w, h, index: globalIndex++
+                });
+              }
+
+              currentY += h + spacing;
+              currentX = margin;
+            }
+          }
+        } else {
+          // PHOTO
+          for (let c = 0; c < item.copiesCount; c++) {
+            const exceedsW = (currentX + w) > (maxX + 0.01);
+            const reaches6 = (w <= 3.05 && photosInRow >= 6);
+
+            if (exceedsW || reaches6) {
+              flushPhotoRow();
+            }
+
+            if (currentY + h > maxY + 0.01) {
+              currentPage = placed.reduce((max, p) => Math.max(max, p.pageIndex), currentPage) + 1;
+              currentX = margin;
+              currentY = margin;
+              currentRowMaxHeight = 0;
+              photosInRow = 0;
+            }
+
+            placed.push({
+              item, isBack: false, pageIndex: currentPage,
+              x: currentX, y: currentY, w, h, index: globalIndex++
+            });
+
+            photosInRow++;
+            currentRowMaxHeight = Math.max(currentRowMaxHeight, h);
+            currentX += w + spacing;
+          }
+        }
+      }
+
+      const totalPages = placed.length === 0 ? 1 : Math.max(...placed.map(p => p.pageIndex)) + 1;
+      return { placed, totalPages, pageWidth, pageHeight, margin, spacing };
+    }
+
+    // ==================== MULTI-PAGE WORD SCROLLING RENDERER ====================
+    function renderMultiPageWordView() {
+      const plan = calculateA4Plan();
+      const container = document.getElementById('wordPagesScrollContainer');
+      document.getElementById('pagesBadgeCount').textContent = plan.totalPages;
+      container.innerHTML = '';
+
+      if (items.length === 0) {
+        container.innerHTML = '<div class="text-center py-12 text-slate-400 text-sm">أضف عناصر أولاً لعرض الأوراق</div>';
+        return;
+      }
+
+      for (let p = 0; p < plan.totalPages; p++) {
+        const pagePhotos = plan.placed.filter(item => item.pageIndex === p);
+        const isBack = pagePhotos.some(item => item.isBack);
+        const isFront = pagePhotos.some(item => !item.isBack);
+
+        const pageBox = document.createElement('div');
+        pageBox.className = 'bg-slate-800/80 p-4 rounded-2xl border border-slate-700 shadow-xl flex flex-col items-center';
+
+        const labelText = isBack && !isFront ? `ورقة ${p + 1} من ${plan.totalPages} (الوجه الخلفي - Duplex)` : `ورقة ${p + 1} من ${plan.totalPages} (الوجه الأمامي)`;
+
+        pageBox.innerHTML = `
+          <div class="w-full flex items-center justify-between mb-3 text-xs">
+            <span class="font-bold px-3 py-1 rounded-lg ${isBack ? 'bg-blue-900 text-blue-200' : 'bg-teal-900 text-teal-200'}">
+              ${labelText}
+            </span>
+            <button onclick="saveSinglePageImage(${p})" class="text-sky-400 hover:text-sky-300 font-bold flex items-center gap-1">
+              💾 حفظ هذه الورقة
+            </button>
+          </div>
+          <!-- A4 Canvas (Aspect Ratio 21.0 / 29.7) -->
+          <div class="w-full max-w-lg aspect-[21/29.7] bg-white rounded shadow-2xl overflow-hidden border border-slate-300">
+            <canvas id="canvasPage_${p}" class="w-full h-full object-contain"></canvas>
+          </div>
+        `;
+        container.appendChild(pageBox);
+
+        // Draw page on Canvas at high definition
+        setTimeout(() => drawPageCanvas(p, plan), 10);
+      }
+    }
+
+    function drawPageCanvas(pageIdx, plan) {
+      const canvas = document.getElementById(`canvasPage_${pageIdx}`);
+      if (!canvas) return;
+
+      const dpi = 200; // Sharp screen preview
+      const a4WidthPx = Math.round((plan.pageWidth / 2.54) * dpi);
+      const a4HeightPx = Math.round((plan.pageHeight / 2.54) * dpi);
+
+      canvas.width = a4WidthPx;
+      canvas.height = a4HeightPx;
+
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, a4WidthPx, a4HeightPx);
+
+      const pagePhotos = plan.placed.filter(item => item.pageIndex === pageIdx);
+      for (const p of pagePhotos) {
+        const img = p.isBack ? p.item.backBitmap : p.item.sourceBitmap;
+        if (!img) continue;
+
+        const x = Math.round((p.x / 2.54) * dpi);
+        const y = Math.round((p.y / 2.54) * dpi);
+        const w = Math.round((p.w / 2.54) * dpi);
+        const h = Math.round((p.h / 2.54) * dpi);
+
+        // Draw cropped centered without borders
+        drawCroppedImage(ctx, img, x, y, w, h);
+      }
+    }
+
+    function drawCroppedImage(ctx, img, dx, dy, dw, dh) {
+      const targetRatio = dw / dh;
+      const srcRatio = img.width / img.height;
+      let sx, sy, sw, sh;
+
+      if (srcRatio > targetRatio) {
+        sh = img.height;
+        sw = Math.round(img.height * targetRatio);
+        sx = Math.round((img.width - sw) / 2);
+        sy = 0;
+      } else {
+        sw = img.width;
+        sh = Math.round(img.width / targetRatio);
+        sx = 0;
+        sy = Math.round((img.height - sh) / 2);
+      }
+
+      ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+    }
+
+    // Save Page as Image
+    window.saveSinglePageImage = function(pageIdx) {
+      const plan = calculateA4Plan();
+      const dpi = 300; // Ultra high-res 300 DPI for photo paper
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round((plan.pageWidth / 2.54) * dpi);
+      canvas.height = Math.round((plan.pageHeight / 2.54) * dpi);
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const pagePhotos = plan.placed.filter(item => item.pageIndex === pageIdx);
+      for (const p of pagePhotos) {
+        const img = p.isBack ? p.item.backBitmap : p.item.sourceBitmap;
+        if (!img) continue;
+        const x = Math.round((p.x / 2.54) * dpi);
+        const y = Math.round((p.y / 2.54) * dpi);
+        const w = Math.round((p.w / 2.54) * dpi);
+        const h = Math.round((p.h / 2.54) * dpi);
+        drawCroppedImage(ctx, img, x, y, w, h);
+      }
+
+      const a = document.createElement('a');
+      a.download = `PhotoGrid_A4_Page${pageIdx + 1}.png`;
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+    };
+
+    document.getElementById('btnSaveAllImages').addEventListener('click', () => {
+      const plan = calculateA4Plan();
+      for (let p = 0; p < plan.totalPages; p++) {
+        saveSinglePageImage(p);
+      }
+    });
+
+    // ==================== EXPORT WORD DOCX (.docx) IN BROWSER ====================
+    document.getElementById('btnExportDocx').addEventListener('click', async () => {
+      if (items.length === 0) {
+        alert('أضف عناصر أولاً');
+        return;
+      }
+
+      const plan = calculateA4Plan();
+      const zip = new JSZip();
+
+      // Collect unique bitmaps
+      const faces = [];
+      const faceMap = new Map();
+
+      plan.placed.forEach(p => {
+        const key = `${p.item.id}_${p.isBack ? 'back' : 'front'}`;
+        const img = p.isBack ? p.item.backBitmap : p.item.sourceBitmap;
+        if (img && !faceMap.has(key)) {
+          const relId = `rId${faces.length + 1}`;
+          faceMap.set(key, relId);
+          faces.push({ key, img, relId, w: p.w, h: p.h });
+        }
+      });
+
+      // Render each face to PNG bytes
+      const imageBytes = [];
+      for (const f of faces) {
+        const c = document.createElement('canvas');
+        c.width = 600;
+        c.height = Math.round(600 * (f.h / f.w));
+        const ctx = c.getContext('2d');
+        drawCroppedImage(ctx, f.img, 0, 0, c.width, c.height);
+        const dataUrl = c.toDataURL('image/png');
+        const b64 = dataUrl.split(',')[1];
+        zip.file(`word/media/image_${faces.indexOf(f) + 1}.png`, b64, { base64: true });
+      }
+
+      // [Content_Types].xml
+      zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="png" ContentType="image/png"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`);
+
+      // _rels/.rels
+      zip.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`);
+
+      // word/_rels/document.xml.rels
+      let docRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`;
+      faces.forEach((f, idx) => {
+        docRels += `\n  <Relationship Id="${f.relId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image_${idx + 1}.png"/>`;
+      });
+      docRels += '\n</Relationships>';
+      zip.file('word/_rels/document.xml.rels', docRels);
+
+      // word/document.xml (In Front of Text with <wp:anchor behindDoc="0">)
+      let docXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+            xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+            xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+  <w:body>`;
+
+      for (let p = 0; p < plan.totalPages; p++) {
+        if (p > 0) {
+          docXml += `\n    <w:p><w:r><w:br w:type="page"/></w:r></w:p>`;
+        }
+        const pagePhotos = plan.placed.filter(item => item.pageIndex === p);
+        pagePhotos.forEach(item => {
+          const key = `${item.item.id}_${item.isBack ? 'back' : 'front'}`;
+          const relId = faceMap.get(key) || 'rId1';
+          const xEmu = Math.round(item.x * 360000);
+          const yEmu = Math.round(item.y * 360000);
+          const wEmu = Math.round(item.w * 360000);
+          const hEmu = Math.round(item.h * 360000);
+          const docId = item.index + 1;
+
+          docXml += `
+    <w:p>
+      <w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>
+      <w:r>
+        <w:drawing>
+          <wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="251658240" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1">
+            <wp:simplePos x="0" y="0"/>
+            <wp:positionH relativeFrom="page"><wp:posOffset>${xEmu}</wp:posOffset></wp:positionH>
+            <wp:positionV relativeFrom="page"><wp:posOffset>${yEmu}</wp:posOffset></wp:positionV>
+            <wp:extent cx="${wEmu}" cy="${hEmu}"/>
+            <wp:effectExtent l="0" t="0" r="0" b="0"/>
+            <wp:wrapNone/>
+            <wp:docPr id="${docId}" name="Photo_${docId}"/>
+            <wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>
+            <a:graphic>
+              <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+                <pic:pic>
+                  <pic:nvPicPr>
+                    <pic:cNvPr id="${docId}" name="Photo_${docId}"/>
+                    <pic:cNvPicPr><a:picLocks noChangeAspect="1"/></pic:cNvPicPr>
+                  </pic:nvPicPr>
+                  <pic:blipFill>
+                    <a:blip r:embed="${relId}"/>
+                    <a:stretch><a:fillRect/></a:stretch>
+                  </pic:blipFill>
+                  <pic:spPr>
+                    <a:xfrm><a:off x="0" y="0"/><a:ext cx="${wEmu}" cy="${hEmu}"/></a:xfrm>
+                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                    <a:ln><a:noFill/></a:ln>
+                  </pic:spPr>
+                </pic:pic>
+              </a:graphicData>
+            </a:graphic>
+          </wp:anchor>
+        </w:drawing>
+      </w:r>
+    </w:p>`;
+        });
+      }
+
+      docXml += `
+    <w:sectPr>
+      <w:pgSz w:w="11906" w:h="16838" w:orient="portrait"/>
+      <w:pgMar w:top="340" w:right="340" w:bottom="340" w:left="340" w:header="0" w:footer="0" w:gutter="0"/>
+    </w:sectPr>
+  </w:body>
+</w:document>`;
+      zip.file('word/document.xml', docXml);
+
+      const content = await zip.generateAsync({ type: 'blob' });
+      const a = document.createElement('a');
+      a.download = `PhotoGrid_A4_Multi_${Date.now()}.docx`;
+      a.href = URL.createObjectURL(content);
+      a.click();
+    });
+  </script>
+</body>
+</html>
