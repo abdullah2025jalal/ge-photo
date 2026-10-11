@@ -17,7 +17,8 @@ object DocxExportHelper {
 
     /**
      * Generates a Microsoft Word .docx file formatted to an A4 page,
-     * containing multi-photo grid placed "In Front of Text" (<wp:anchor behindDoc="0">)
+     * containing multi-photo grid with front and back document faces
+     * placed "In Front of Text" (<wp:anchor behindDoc="0">)
      * with EMU coordinate conversions, 1 mm spacing, 0.6 cm margins, and zero dashed borders.
      */
     suspend fun generateMultiPhotoDocx(
@@ -28,22 +29,32 @@ object DocxExportHelper {
         val outputDir = File(context.cacheDir, "exports").apply { mkdirs() }
         val outputFile = File(outputDir, fileName)
 
-        // Find all unique photos in the plan
-        val uniqueItems = plan.placedPhotos.map { it.photoItem }.distinctBy { it.id }
-        val itemToRelId = mutableMapOf<String, String>()
-        val itemToImageBytes = mutableMapOf<String, ByteArray>()
+        // Map every unique face (item_id + front/back) to a relationship ID and its PNG bytes
+        val faceKeys = mutableListOf<Pair<String, Bitmap>>()
+        val faceToRelId = mutableMapOf<String, String>()
 
-        uniqueItems.forEachIndexed { index, item ->
-            val relId = "rId${index + 1}"
-            itemToRelId[item.id] = relId
+        for (placed in plan.placedPhotos) {
+            val item = placed.photoItem
+            val isBack = placed.isBackSide
+            val faceKey = "${item.id}_${if (isBack) "back" else "front"}"
+            val bitmap = if (isBack) item.backBitmap else item.sourceBitmap
 
-            val source = item.sourceBitmap
-            if (source != null) {
-                val cropped = BitmapProcessor.cropToAspectRatio(source, item.aspectRatio)
-                val stream = ByteArrayOutputStream()
-                cropped.compress(Bitmap.CompressFormat.PNG, 100, stream)
-                itemToImageBytes[item.id] = stream.toByteArray()
+            if (bitmap != null && !faceToRelId.containsKey(faceKey)) {
+                val relId = "rId${faceKeys.size + 1}"
+                faceToRelId[faceKey] = relId
+                faceKeys.add(Pair(faceKey, bitmap))
             }
+        }
+
+        val itemToImageBytes = mutableMapOf<String, ByteArray>()
+        faceKeys.forEachIndexed { index, pair ->
+            val faceKey = pair.first
+            val originalBmp = pair.second
+            val item = plan.placedPhotos.first { "${it.photoItem.id}_${if (it.isBackSide) "back" else "front"}" == faceKey }.photoItem
+            val cropped = BitmapProcessor.cropToAspectRatio(originalBmp, item.aspectRatio)
+            val stream = ByteArrayOutputStream()
+            cropped.compress(Bitmap.CompressFormat.PNG, 100, stream)
+            itemToImageBytes[faceKey] = stream.toByteArray()
         }
 
         FileOutputStream(outputFile).use { fos ->
@@ -55,11 +66,11 @@ object DocxExportHelper {
                 writeZipEntry(zos, "_rels/.rels", buildGlobalRelsXml())
 
                 // 3. word/_rels/document.xml.rels
-                writeZipEntry(zos, "word/_rels/document.xml.rels", buildDocumentRelsXml(uniqueItems, itemToRelId))
+                writeZipEntry(zos, "word/_rels/document.xml.rels", buildDocumentRelsXml(faceKeys, faceToRelId))
 
-                // 4. word/media/image_{index}.png for each unique photo
-                uniqueItems.forEachIndexed { index, item ->
-                    val imageBytes = itemToImageBytes[item.id] ?: ByteArray(0)
+                // 4. word/media/image_{index}.png for each unique photo face
+                faceKeys.forEachIndexed { index, pair ->
+                    val imageBytes = itemToImageBytes[pair.first] ?: ByteArray(0)
                     val entry = ZipEntry("word/media/image_${index + 1}.png")
                     zos.putNextEntry(entry)
                     zos.write(imageBytes)
@@ -67,7 +78,7 @@ object DocxExportHelper {
                 }
 
                 // 5. word/document.xml
-                writeZipEntry(zos, "word/document.xml", buildDocumentXml(plan, itemToRelId))
+                writeZipEntry(zos, "word/document.xml", buildDocumentXml(plan, faceToRelId))
             }
         }
 
@@ -95,15 +106,15 @@ object DocxExportHelper {
 </Relationships>""".trimIndent()
 
     private fun buildDocumentRelsXml(
-        items: List<PrintPhotoItem>,
-        itemToRelId: Map<String, String>
+        faceKeys: List<Pair<String, Bitmap>>,
+        faceToRelId: Map<String, String>
     ): String {
         val sb = StringBuilder()
         sb.append("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 """)
-        items.forEachIndexed { index, item ->
-            val relId = itemToRelId[item.id] ?: "rId${index + 1}"
+        faceKeys.forEachIndexed { index, pair ->
+            val relId = faceToRelId[pair.first] ?: "rId${index + 1}"
             val mediaPath = "media/image_${index + 1}.png"
             sb.append("""  <Relationship Id="$relId" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="$mediaPath"/>
 """)
@@ -114,7 +125,7 @@ object DocxExportHelper {
 
     private fun buildDocumentXml(
         plan: A4GridPlan,
-        itemToRelId: Map<String, String>
+        faceToRelId: Map<String, String>
     ): String {
         val sb = StringBuilder()
         sb.append("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -126,12 +137,27 @@ object DocxExportHelper {
   <w:body>
 """)
 
-        // Place each photo as a floating drawing "In Front of Text"
-        for (placed in plan.placedPhotos) {
-            val docPrId = placed.instanceIndex + 1
-            val relId = itemToRelId[placed.photoItem.id] ?: "rId1"
+        // Group photos by page index
+        val pages = plan.placedPhotos.groupBy { it.pageIndex }.toSortedMap()
 
-            sb.append("""
+        pages.forEach { (pageIdx, photosOnPage) ->
+            if (pageIdx > 0) {
+                // Page break before next page
+                sb.append("""
+    <w:p>
+      <w:r>
+        <w:br w:type="page"/>
+      </w:r>
+    </w:p>
+""")
+            }
+
+            for (placed in photosOnPage) {
+                val docPrId = placed.instanceIndex + 1
+                val faceKey = "${placed.photoItem.id}_${if (placed.isBackSide) "back" else "front"}"
+                val relId = faceToRelId[faceKey] ?: "rId1"
+
+                sb.append("""
     <w:p>
       <w:pPr>
         <w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>
@@ -188,6 +214,7 @@ object DocxExportHelper {
       </w:r>
     </w:p>
 """)
+            }
         }
 
         // Section properties: A4 page size (11906 x 16838 dxa), margin 0.6 cm = 340 dxa

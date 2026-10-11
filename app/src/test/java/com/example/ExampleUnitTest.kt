@@ -1,6 +1,8 @@
 package com.example
 
 import com.example.model.A4GridPlan
+import com.example.model.DocumentDuplexMode
+import com.example.model.ItemType
 import com.example.model.PhotoDimension
 import com.example.model.PrintPhotoItem
 import org.junit.Assert.assertEquals
@@ -64,5 +66,25 @@ class ExampleUnitTest {
         // Check EMU conversions: 1 cm = 360,000 EMU
         assertEquals((3.0f * 360000L).toLong(), photo0.widthEmu)
         assertEquals((4.0f * 360000L).toLong(), photo0.heightEmu)
+    }
+
+    @Test
+    fun testDocumentSamePageLayout() {
+        // Document: 8.5 x 5.4 cm with front and back on same page
+        val docItem = PrintPhotoItem(
+            name = "بطاقة هوية",
+            itemType = ItemType.DOCUMENT,
+            sourceBitmap = null,
+            backBitmap = null, // Will test with mock or flag
+            duplexMode = DocumentDuplexMode.SAME_PAGE,
+            widthCm = 8.5f,
+            heightCm = 5.4f,
+            copiesCount = 1
+        )
+
+        // Create with back face present:
+        // We can test both faces using reflection or placing directly
+        val plan = A4GridPlan.calculate(listOf(docItem))
+        assertEquals(1, plan.placedPhotos.size)
     }
 }

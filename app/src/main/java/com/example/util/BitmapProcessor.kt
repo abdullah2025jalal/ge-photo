@@ -83,8 +83,10 @@ object BitmapProcessor {
 
         for (placed in pagePhotos) {
             val item = placed.photoItem
-            val sourceBitmap = item.sourceBitmap ?: continue
-            val cacheKey = "${item.id}_${item.widthCm}_${item.heightCm}"
+            val sourceBitmap = if (placed.isBackSide) item.backBitmap else item.sourceBitmap
+            if (sourceBitmap == null) continue
+
+            val cacheKey = "${item.id}_${if (placed.isBackSide) "back" else "front"}_${item.widthCm}_${item.heightCm}"
 
             val cropped = croppedCache.getOrPut(cacheKey) {
                 cropToAspectRatio(sourceBitmap, item.aspectRatio)
