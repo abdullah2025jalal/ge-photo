@@ -84,13 +84,6 @@ object BitmapProcessor {
         for (placed in pagePhotos) {
             val item = placed.photoItem
             val sourceBitmap = if (placed.isBackSide) item.backBitmap else item.sourceBitmap
-            if (sourceBitmap == null) continue
-
-            val cacheKey = "${item.id}_${if (placed.isBackSide) "back" else "front"}_${item.widthCm}_${item.heightCm}"
-
-            val cropped = croppedCache.getOrPut(cacheKey) {
-                cropToAspectRatio(sourceBitmap, item.aspectRatio)
-            }
 
             val cellX = placed.xPx(dpi).toFloat()
             val cellY = placed.yPx(dpi).toFloat()
@@ -99,13 +92,41 @@ object BitmapProcessor {
 
             val destRect = RectF(cellX, cellY, cellX + cellW, cellY + cellH)
 
-            // Draw photo with zero borders or dashed lines as requested
-            canvas.drawBitmap(
-                cropped,
-                Rect(0, 0, cropped.width, cropped.height),
-                destRect,
-                photoPaint
-            )
+            if (sourceBitmap != null) {
+                val cacheKey = "${item.id}_${if (placed.isBackSide) "back" else "front"}_${item.widthCm}_${item.heightCm}"
+
+                val cropped = croppedCache.getOrPut(cacheKey) {
+                    cropToAspectRatio(sourceBitmap, item.aspectRatio)
+                }
+
+                // Draw photo with zero borders or dashed lines as requested
+                canvas.drawBitmap(
+                    cropped,
+                    Rect(0, 0, cropped.width, cropped.height),
+                    destRect,
+                    photoPaint
+                )
+            } else if (placed.isBackSide) {
+                // If back side image is not provided, draw a clean placeholder card
+                val bgPaint = Paint().apply {
+                    color = Color.parseColor("#F8FAFC")
+                    style = Paint.Style.FILL
+                }
+                val borderPaint = Paint().apply {
+                    color = Color.parseColor("#CBD5E1")
+                    style = Paint.Style.STROKE
+                    strokeWidth = (dpi / 150f) * 2f
+                }
+                val textPaint = Paint().apply {
+                    color = Color.parseColor("#64748B")
+                    textSize = (dpi / 150f) * 16f
+                    isAntiAlias = true
+                    textAlign = Paint.Align.CENTER
+                }
+                canvas.drawRect(destRect, bgPaint)
+                canvas.drawRect(destRect, borderPaint)
+                canvas.drawText("الوجه الخلفي للمستند", destRect.centerX(), destRect.centerY() + (textPaint.textSize / 3f), textPaint)
+            }
         }
 
         a4Bitmap

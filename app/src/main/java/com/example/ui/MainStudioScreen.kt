@@ -183,7 +183,7 @@ fun MainStudioScreen() {
     var isRenderingPreview by remember { mutableStateOf(false) }
     var isExportingDocx by remember { mutableStateOf(false) }
 
-    LaunchedEffect(gridPlan) {
+    LaunchedEffect(gridPlan, activeTabIndex) {
         if (printItems.isNotEmpty()) {
             isRenderingPreview = true
             scope.launch {

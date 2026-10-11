@@ -55,71 +55,136 @@ data class A4GridPlan(
             val maxY = pageHeight - marginCm
 
             val placed = mutableListOf<PlacedPhotoInstance>()
+            var globalIndex = 0
+
+            // 1. Separate items: Photos are always prioritized in the top row(s),
+            // and Documents are always placed in rows below the photos with exactly 1 mm spacing!
+            val photoItems = items.filter { it.itemType == ItemType.PHOTO }
+            val docItems = items.filter { it.itemType == ItemType.DOCUMENT }
+
             var currentPage = 0
             var currentX = minX
             var currentY = minY
             var currentRowMaxHeight = 0f
             var photosInCurrentRow = 0
-            var globalIndex = 0
 
-            // Helper to wrap the current photo row
-            fun flushCurrentPhotoRow() {
-                if (photosInCurrentRow > 0) {
-                    currentY += currentRowMaxHeight + spacingCm
-                    currentX = minX
-                    currentRowMaxHeight = 0f
-                    photosInCurrentRow = 0
+            // Layout all standard photos in top rows first
+            for (photoItem in photoItems) {
+                val w = photoItem.widthCm.coerceAtLeast(1.0f)
+                val h = photoItem.heightCm.coerceAtLeast(1.0f)
+
+                for (copy in 0 until photoItem.copiesCount) {
+                    val exceedsWidth = (currentX + w) > (maxX + 0.01f)
+                    val reachesMaxFor3cm = (w <= 3.05f && photosInCurrentRow >= 6)
+
+                    if (exceedsWidth || reachesMaxFor3cm) {
+                        // Move down to next row of photos
+                        currentY += currentRowMaxHeight + spacingCm
+                        currentX = minX
+                        currentRowMaxHeight = 0f
+                        photosInCurrentRow = 0
+                    }
+
+                    if ((currentY + h) > (maxY + 0.01f)) {
+                        currentPage++
+                        currentX = minX
+                        currentY = minY
+                        currentRowMaxHeight = 0f
+                        photosInCurrentRow = 0
+                    }
+
+                    placed.add(
+                        PlacedPhotoInstance(
+                            photoItem = photoItem,
+                            isBackSide = false,
+                            instanceIndex = globalIndex++,
+                            pageIndex = currentPage,
+                            xCm = currentX,
+                            yCm = currentY,
+                            widthCm = w,
+                            heightCm = h
+                        )
+                    )
+
+                    photosInCurrentRow++
+                    currentRowMaxHeight = max(currentRowMaxHeight, h)
+                    currentX += w + spacingCm
                 }
             }
 
-            for (item in items) {
-                val w = item.widthCm.coerceAtLeast(1.0f)
-                val h = item.heightCm.coerceAtLeast(1.0f)
+            // If photos were placed in the last row, advance Y by row height + 1 mm spacing
+            // so documents are placed in the row BELOW the photos with 1 mm gap!
+            if (photosInCurrentRow > 0) {
+                currentY += currentRowMaxHeight + spacingCm
+                currentX = minX
+                currentRowMaxHeight = 0f
+                photosInCurrentRow = 0
+            }
 
-                if (item.itemType == ItemType.DOCUMENT) {
-                    // Documents must ALWAYS start on a new row below any prior photos
-                    flushCurrentPhotoRow()
+            // Layout all documents in the row(s) below the photos
+            for (docItem in docItems) {
+                val w = docItem.widthCm.coerceAtLeast(1.0f)
+                val h = docItem.heightCm.coerceAtLeast(1.0f)
 
-                    for (copy in 0 until item.copiesCount) {
-                        if (item.duplexMode == DocumentDuplexMode.BACK_SIDE && item.hasBackFace) {
-                            // Duplex Mode: Front on currentPage, Back on (currentPage + 1)
-                            // Check if current Y fits on the page:
-                            if ((currentY + h) > (maxY + 0.01f)) {
-                                // Find highest page so far and advance
-                                val highestPage = placed.maxOfOrNull { it.pageIndex } ?: currentPage
-                                currentPage = if (highestPage % 2 == 0) highestPage + 2 else highestPage + 1
-                                currentX = minX
-                                currentY = minY
-                                currentRowMaxHeight = 0f
-                                photosInCurrentRow = 0
-                            }
+                for (copy in 0 until docItem.copiesCount) {
+                    // Check if document fits vertically on current page
+                    if ((currentY + h) > (maxY + 0.01f)) {
+                        val highestPage = placed.maxOfOrNull { it.pageIndex } ?: currentPage
+                        currentPage = highestPage + 1
+                        currentX = minX
+                        currentY = minY
+                    }
 
-                            val frontPage = currentPage
-                            val backPage = currentPage + 1
+                    if (docItem.duplexMode == DocumentDuplexMode.BACK_SIDE) {
+                        // Duplex Mode:
+                        // Front face on Front Page (currentPage) at left margin (0.6 cm)
+                        // Back face on Back Page (currentPage + 1) at mirror position (0.6 cm from right)
+                        // Both at the exact same vertical position Y (1 mm below photos)
+                        val frontPage = currentPage
+                        val backPage = currentPage + 1
 
-                            // Front face on Front Page (0.6 cm from left)
-                            val frontX = minX
-                            placed.add(
-                                PlacedPhotoInstance(
-                                    photoItem = item,
-                                    isBackSide = false,
-                                    instanceIndex = globalIndex++,
-                                    pageIndex = frontPage,
-                                    xCm = frontX,
-                                    yCm = currentY,
-                                    widthCm = w,
-                                    heightCm = h
-                                )
+                        val frontX = minX
+                        placed.add(
+                            PlacedPhotoInstance(
+                                photoItem = docItem,
+                                isBackSide = false,
+                                instanceIndex = globalIndex++,
+                                pageIndex = frontPage,
+                                xCm = frontX,
+                                yCm = currentY,
+                                widthCm = w,
+                                heightCm = h
                             )
+                        )
 
-                            // Back face on Back Page (exact mirror position: 0.6 cm from right edge)
-                            val backX = pageWidth - marginCm - w
+                        val backX = pageWidth - marginCm - w
+                        placed.add(
+                            PlacedPhotoInstance(
+                                photoItem = docItem,
+                                isBackSide = true,
+                                instanceIndex = globalIndex++,
+                                pageIndex = backPage,
+                                xCm = backX,
+                                yCm = currentY,
+                                widthCm = w,
+                                heightCm = h
+                            )
+                        )
+
+                        // Advance row for next document copy
+                        currentY += h + spacingCm
+                        currentX = minX
+                    } else {
+                        // Same Page Mode: Both faces on the same page
+                        if (docItem.hasBackFace) {
+                            // Back face on Left (0.6 cm from left margin)
+                            val backX = minX
                             placed.add(
                                 PlacedPhotoInstance(
-                                    photoItem = item,
+                                    photoItem = docItem,
                                     isBackSide = true,
                                     instanceIndex = globalIndex++,
-                                    pageIndex = backPage,
+                                    pageIndex = currentPage,
                                     xCm = backX,
                                     yCm = currentY,
                                     widthCm = w,
@@ -127,110 +192,40 @@ data class A4GridPlan(
                                 )
                             )
 
-                            // Advance row vertically for the next item on these pages
-                            currentY += h + spacingCm
-                            currentX = minX
-                            currentRowMaxHeight = 0f
-                            photosInCurrentRow = 0
-
-                        } else {
-                            // Same Page Document Mode: Front on Right (0.6cm from right), Back on Left (0.6cm from left)
-                            if ((currentY + h) > (maxY + 0.01f)) {
-                                currentPage = (placed.maxOfOrNull { it.pageIndex } ?: currentPage) + 1
-                                currentX = minX
-                                currentY = minY
-                                currentRowMaxHeight = 0f
-                                photosInCurrentRow = 0
-                            }
-
-                            if (item.hasBackFace) {
-                                // Left face: Back face at distance 0.6 cm from left edge
-                                val backX = minX
-                                placed.add(
-                                    PlacedPhotoInstance(
-                                        photoItem = item,
-                                        isBackSide = true,
-                                        instanceIndex = globalIndex++,
-                                        pageIndex = currentPage,
-                                        xCm = backX,
-                                        yCm = currentY,
-                                        widthCm = w,
-                                        heightCm = h
-                                    )
+                            // Front face on Right (0.6 cm from right margin)
+                            val frontX = pageWidth - marginCm - w
+                            placed.add(
+                                PlacedPhotoInstance(
+                                    photoItem = docItem,
+                                    isBackSide = false,
+                                    instanceIndex = globalIndex++,
+                                    pageIndex = currentPage,
+                                    xCm = frontX,
+                                    yCm = currentY,
+                                    widthCm = w,
+                                    heightCm = h
                                 )
-
-                                // Right face: Front face at distance 0.6 cm from right edge
-                                val frontX = pageWidth - marginCm - w
-                                placed.add(
-                                    PlacedPhotoInstance(
-                                        photoItem = item,
-                                        isBackSide = false,
-                                        instanceIndex = globalIndex++,
-                                        pageIndex = currentPage,
-                                        xCm = frontX,
-                                        yCm = currentY,
-                                        widthCm = w,
-                                        heightCm = h
-                                    )
-                                )
-                            } else {
-                                // Single face document on the same page
-                                val frontX = pageWidth - marginCm - w
-                                placed.add(
-                                    PlacedPhotoInstance(
-                                        photoItem = item,
-                                        isBackSide = false,
-                                        instanceIndex = globalIndex++,
-                                        pageIndex = currentPage,
-                                        xCm = frontX,
-                                        yCm = currentY,
-                                        widthCm = w,
-                                        heightCm = h
-                                    )
-                                )
-                            }
-
-                            // Advance row vertically by document height + 1 mm spacing
-                            currentY += h + spacingCm
-                            currentX = minX
-                            currentRowMaxHeight = 0f
-                            photosInCurrentRow = 0
-                        }
-                    }
-                } else {
-                    // ItemType.PHOTO: Standard photo grid
-                    for (copy in 0 until item.copiesCount) {
-                        val exceedsWidth = (currentX + w) > (maxX + 0.01f)
-                        val reachesMaxFor3cm = (w <= 3.05f && photosInCurrentRow >= 6)
-
-                        if (exceedsWidth || reachesMaxFor3cm) {
-                            flushCurrentPhotoRow()
-                        }
-
-                        if ((currentY + h) > (maxY + 0.01f)) {
-                            currentPage = (placed.maxOfOrNull { it.pageIndex } ?: currentPage) + 1
-                            currentX = minX
-                            currentY = minY
-                            currentRowMaxHeight = 0f
-                            photosInCurrentRow = 0
-                        }
-
-                        placed.add(
-                            PlacedPhotoInstance(
-                                photoItem = item,
-                                isBackSide = false,
-                                instanceIndex = globalIndex++,
-                                pageIndex = currentPage,
-                                xCm = currentX,
-                                yCm = currentY,
-                                widthCm = w,
-                                heightCm = h
                             )
-                        )
+                        } else {
+                            // Single face document on the same page
+                            val frontX = minX
+                            placed.add(
+                                PlacedPhotoInstance(
+                                    photoItem = docItem,
+                                    isBackSide = false,
+                                    instanceIndex = globalIndex++,
+                                    pageIndex = currentPage,
+                                    xCm = frontX,
+                                    yCm = currentY,
+                                    widthCm = w,
+                                    heightCm = h
+                                )
+                            )
+                        }
 
-                        photosInCurrentRow++
-                        currentRowMaxHeight = max(currentRowMaxHeight, h)
-                        currentX += w + spacingCm
+                        // Advance row vertically by document height + 1 mm spacing
+                        currentY += h + spacingCm
+                        currentX = minX
                     }
                 }
             }

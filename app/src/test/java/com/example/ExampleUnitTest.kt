@@ -106,4 +106,78 @@ class ExampleUnitTest {
         val docPlaced = plan.placedPhotos.first { it.photoItem.itemType == ItemType.DOCUMENT }
         assertEquals(4.7f, docPlaced.yCm, 0.01f)
     }
+
+    @Test
+    fun testDocumentAddedFirstStillPlacesPhotosAtTop() {
+        // Document is first in list, but photos should still be placed at top (row 1)
+        val document = PrintPhotoItem(
+            name = "بطاقة هوية",
+            itemType = ItemType.DOCUMENT,
+            widthCm = 8.5f,
+            heightCm = 5.4f,
+            copiesCount = 1
+        )
+        val photos = PrintPhotoItem(
+            name = "صور شخصية",
+            itemType = ItemType.PHOTO,
+            widthCm = 3.0f,
+            heightCm = 4.0f,
+            copiesCount = 6
+        )
+
+        val plan = A4GridPlan.calculate(
+            items = listOf(document, photos),
+            marginCm = 0.6f,
+            spacingCm = 0.1f
+        )
+
+        // Photos on row 1: Y = 0.6 cm
+        val photosList = plan.placedPhotos.filter { it.photoItem.itemType == ItemType.PHOTO }
+        assertEquals(6, photosList.size)
+        photosList.forEach { assertEquals(0.6f, it.yCm, 0.01f) }
+
+        // Document in row below photos: Y = 0.6 + 4.0 + 0.1 = 4.7 cm
+        val docPlaced = plan.placedPhotos.first { it.photoItem.itemType == ItemType.DOCUMENT }
+        assertEquals(4.7f, docPlaced.yCm, 0.01f)
+    }
+
+    @Test
+    fun testDuplexBackSideDocumentGeneratesPage2() {
+        val photos = PrintPhotoItem(
+            name = "صور شخصية",
+            itemType = ItemType.PHOTO,
+            widthCm = 3.0f,
+            heightCm = 4.0f,
+            copiesCount = 6
+        )
+        val document = PrintPhotoItem(
+            name = "بطاقة هوية بوجهين",
+            itemType = ItemType.DOCUMENT,
+            duplexMode = DocumentDuplexMode.BACK_SIDE,
+            widthCm = 8.5f,
+            heightCm = 5.4f,
+            copiesCount = 1
+        )
+
+        val plan = A4GridPlan.calculate(
+            items = listOf(photos, document),
+            marginCm = 0.6f,
+            spacingCm = 0.1f
+        )
+
+        // Must produce 2 pages (Front page + Back page)
+        assertEquals(2, plan.totalPagesCount)
+
+        // Front face on page 0 at Y = 4.7 cm, X = 0.6 cm
+        val frontFace = plan.placedPhotos.first { it.photoItem.itemType == ItemType.DOCUMENT && !it.isBackSide }
+        assertEquals(0, frontFace.pageIndex)
+        assertEquals(0.6f, frontFace.xCm, 0.01f)
+        assertEquals(4.7f, frontFace.yCm, 0.01f)
+
+        // Back face on page 1 at Y = 4.7 cm (exact same row height), X = 21.0 - 0.6 - 8.5 = 11.9 cm
+        val backFace = plan.placedPhotos.first { it.photoItem.itemType == ItemType.DOCUMENT && it.isBackSide }
+        assertEquals(1, backFace.pageIndex)
+        assertEquals(11.9f, backFace.xCm, 0.01f)
+        assertEquals(4.7f, backFace.yCm, 0.01f)
+    }
 }

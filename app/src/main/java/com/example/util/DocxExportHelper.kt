@@ -37,7 +37,30 @@ object DocxExportHelper {
             val item = placed.photoItem
             val isBack = placed.isBackSide
             val faceKey = "${item.id}_${if (isBack) "back" else "front"}"
-            val bitmap = if (isBack) item.backBitmap else item.sourceBitmap
+            var bitmap = if (isBack) item.backBitmap else item.sourceBitmap
+
+            if (bitmap == null && isBack) {
+                // Generate a clean placeholder bitmap for the back face of document
+                val phW = placed.widthPx(300).coerceAtLeast(300)
+                val phH = placed.heightPx(300).coerceAtLeast(200)
+                val phBmp = Bitmap.createBitmap(phW, phH, Bitmap.Config.ARGB_8888)
+                val c = android.graphics.Canvas(phBmp)
+                c.drawColor(android.graphics.Color.parseColor("#F8FAFC"))
+                val borderP = android.graphics.Paint().apply {
+                    color = android.graphics.Color.parseColor("#CBD5E1")
+                    style = android.graphics.Paint.Style.STROKE
+                    strokeWidth = 4f
+                }
+                c.drawRect(0f, 0f, phW.toFloat(), phH.toFloat(), borderP)
+                val textP = android.graphics.Paint().apply {
+                    color = android.graphics.Color.parseColor("#64748B")
+                    textSize = 28f
+                    isAntiAlias = true
+                    textAlign = android.graphics.Paint.Align.CENTER
+                }
+                c.drawText("الوجه الخلفي للمستند", phW / 2f, phH / 2f + 10f, textP)
+                bitmap = phBmp
+            }
 
             if (bitmap != null && !faceToRelId.containsKey(faceKey)) {
                 val relId = "rId${faceKeys.size + 1}"
@@ -152,16 +175,19 @@ object DocxExportHelper {
 """)
             }
 
+            sb.append("""
+    <w:p>
+      <w:pPr>
+        <w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>
+      </w:pPr>
+""")
+
             for (placed in photosOnPage) {
                 val docPrId = placed.instanceIndex + 1
                 val faceKey = "${placed.photoItem.id}_${if (placed.isBackSide) "back" else "front"}"
                 val relId = faceToRelId[faceKey] ?: "rId1"
 
                 sb.append("""
-    <w:p>
-      <w:pPr>
-        <w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>
-      </w:pPr>
       <w:r>
         <w:drawing>
           <wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="251658240" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1">
@@ -212,9 +238,12 @@ object DocxExportHelper {
           </wp:anchor>
         </w:drawing>
       </w:r>
-    </w:p>
 """)
             }
+
+            sb.append("""
+    </w:p>
+""")
         }
 
         // Section properties: A4 page size (11906 x 16838 dxa), margin 0.6 cm = 340 dxa
