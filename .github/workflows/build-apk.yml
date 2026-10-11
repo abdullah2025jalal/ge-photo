@@ -1,0 +1,81 @@
+name: Build Release APK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build & Package APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Make Gradlew Executable
+        run: chmod +x gradlew
+
+      - name: Setup Signing Keystore
+        run: |
+          if [ -n "${{ secrets.UPLOAD_KEY_BASE64 }}" ]; then
+            echo "${{ secrets.UPLOAD_KEY_BASE64 }}" | base64 --decode > my-upload-key.jks
+            echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/my-upload-key.jks" >> $GITHUB_ENV
+            echo "STORE_PASSWORD=${{ secrets.STORE_PASSWORD }}" >> $GITHUB_ENV
+            echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV
+          else
+            echo "No custom keystore secret found. Generating signing keystore for release..."
+            keytool -genkey -v -keystore my-upload-key.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "android123" -keypass "android123" \
+              -dname "CN=PhotoGrid, OU=Studio, O=App, L=Global, S=Global, C=US"
+            echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/my-upload-key.jks" >> $GITHUB_ENV
+            echo "STORE_PASSWORD=android123" >> $GITHUB_ENV
+            echo "KEY_PASSWORD=android123" >> $GITHUB_ENV
+          fi
+
+      - name: Build Release APK
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Locate and Rename APK
+        run: |
+          mkdir -p build-output
+          APK_PATH=$(find app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
+          if [ -f "$APK_PATH" ]; then
+            cp "$APK_PATH" build-output/PhotoGrid-Release.apk
+            echo "APK generated successfully at build-output/PhotoGrid-Release.apk"
+          else
+            echo "Release APK not found, checking debug APK fallback..."
+            ./gradlew assembleDebug
+            cp $(find app/build/outputs/apk/debug/ -name "*.apk" | head -n 1) build-output/PhotoGrid-Debug.apk
+          fi
+
+      - name: Upload APK as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhotoGrid-Release-APK
+          path: build-output/*.apk
+          retention-days: 30
+
+      - name: Create GitHub Release (On Tag Push)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build-output/*.apk
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
