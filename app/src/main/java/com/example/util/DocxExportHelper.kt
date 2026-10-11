@@ -3,6 +3,7 @@ package com.example.util
 import android.content.Context
 import android.graphics.Bitmap
 import com.example.model.A4GridPlan
+import com.example.model.PrintPhotoItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -16,22 +17,34 @@ object DocxExportHelper {
 
     /**
      * Generates a Microsoft Word .docx file formatted to an A4 page,
-     * containing the grid of photos positioned "In Front of Text" (<wp:anchor behindDoc="0">)
-     * with EMU coordinate conversions and 3 mm cut spacing.
+     * containing multi-photo grid placed "In Front of Text" (<wp:anchor behindDoc="0">)
+     * with EMU coordinate conversions, 1 mm spacing, 0.6 cm margins, and zero dashed borders.
      */
-    suspend fun generateDocx(
+    suspend fun generateMultiPhotoDocx(
         context: Context,
-        photoBitmap: Bitmap,
         plan: A4GridPlan,
-        fileName: String = "ID_Photos_A4_Grid.docx"
+        fileName: String = "PhotoGrid_A4_Multi.docx"
     ): File = withContext(Dispatchers.IO) {
         val outputDir = File(context.cacheDir, "exports").apply { mkdirs() }
         val outputFile = File(outputDir, fileName)
 
-        // Compress photo to PNG bytes
-        val imageBytesStream = ByteArrayOutputStream()
-        photoBitmap.compress(Bitmap.CompressFormat.PNG, 100, imageBytesStream)
-        val imageBytes = imageBytesStream.toByteArray()
+        // Find all unique photos in the plan
+        val uniqueItems = plan.placedPhotos.map { it.photoItem }.distinctBy { it.id }
+        val itemToRelId = mutableMapOf<String, String>()
+        val itemToImageBytes = mutableMapOf<String, ByteArray>()
+
+        uniqueItems.forEachIndexed { index, item ->
+            val relId = "rId${index + 1}"
+            itemToRelId[item.id] = relId
+
+            val source = item.sourceBitmap
+            if (source != null) {
+                val cropped = BitmapProcessor.cropToAspectRatio(source, item.aspectRatio)
+                val stream = ByteArrayOutputStream()
+                cropped.compress(Bitmap.CompressFormat.PNG, 100, stream)
+                itemToImageBytes[item.id] = stream.toByteArray()
+            }
+        }
 
         FileOutputStream(outputFile).use { fos ->
             ZipOutputStream(fos).use { zos ->
@@ -42,16 +55,19 @@ object DocxExportHelper {
                 writeZipEntry(zos, "_rels/.rels", buildGlobalRelsXml())
 
                 // 3. word/_rels/document.xml.rels
-                writeZipEntry(zos, "word/_rels/document.xml.rels", buildDocumentRelsXml())
+                writeZipEntry(zos, "word/_rels/document.xml.rels", buildDocumentRelsXml(uniqueItems, itemToRelId))
 
-                // 4. word/media/image1.png
-                val imageEntry = ZipEntry("word/media/image1.png")
-                zos.putNextEntry(imageEntry)
-                zos.write(imageBytes)
-                zos.closeEntry()
+                // 4. word/media/image_{index}.png for each unique photo
+                uniqueItems.forEachIndexed { index, item ->
+                    val imageBytes = itemToImageBytes[item.id] ?: ByteArray(0)
+                    val entry = ZipEntry("word/media/image_${index + 1}.png")
+                    zos.putNextEntry(entry)
+                    zos.write(imageBytes)
+                    zos.closeEntry()
+                }
 
                 // 5. word/document.xml
-                writeZipEntry(zos, "word/document.xml", buildDocumentXml(plan))
+                writeZipEntry(zos, "word/document.xml", buildDocumentXml(plan, itemToRelId))
             }
         }
 
@@ -78,13 +94,28 @@ object DocxExportHelper {
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
 </Relationships>""".trimIndent()
 
-    private fun buildDocumentRelsXml(): String = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    private fun buildDocumentRelsXml(
+        items: List<PrintPhotoItem>,
+        itemToRelId: Map<String, String>
+    ): String {
+        val sb = StringBuilder()
+        sb.append("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/>
-</Relationships>""".trimIndent()
+""")
+        items.forEachIndexed { index, item ->
+            val relId = itemToRelId[item.id] ?: "rId${index + 1}"
+            val mediaPath = "media/image_${index + 1}.png"
+            sb.append("""  <Relationship Id="$relId" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="$mediaPath"/>
+""")
+        }
+        sb.append("</Relationships>")
+        return sb.toString()
+    }
 
-    private fun buildDocumentXml(plan: A4GridPlan): String {
-        // A4 page width: 21 cm = 11906 dxa, height: 29.7 cm = 16838 dxa (20ths of a pt)
+    private fun buildDocumentXml(
+        plan: A4GridPlan,
+        itemToRelId: Map<String, String>
+    ): String {
         val sb = StringBuilder()
         sb.append("""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -96,8 +127,10 @@ object DocxExportHelper {
 """)
 
         // Place each photo as a floating drawing "In Front of Text"
-        for (cell in plan.cells) {
-            val docPrId = cell.index + 1
+        for (placed in plan.placedPhotos) {
+            val docPrId = placed.instanceIndex + 1
+            val relId = itemToRelId[placed.photoItem.id] ?: "rId1"
+
             sb.append("""
     <w:p>
       <w:pPr>
@@ -108,12 +141,12 @@ object DocxExportHelper {
           <wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="251658240" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1">
             <wp:simplePos x="0" y="0"/>
             <wp:positionH relativeFrom="page">
-              <wp:posOffset>${cell.xEmu}</wp:posOffset>
+              <wp:posOffset>${placed.xEmu}</wp:posOffset>
             </wp:positionH>
             <wp:positionV relativeFrom="page">
-              <wp:posOffset>${cell.yEmu}</wp:posOffset>
+              <wp:posOffset>${placed.yEmu}</wp:posOffset>
             </wp:positionV>
-            <wp:extent cx="${cell.widthEmu}" cy="${cell.heightEmu}"/>
+            <wp:extent cx="${placed.widthEmu}" cy="${placed.heightEmu}"/>
             <wp:effectExtent l="0" t="0" r="0" b="0"/>
             <wp:wrapNone/>
             <wp:docPr id="$docPrId" name="Photo_$docPrId"/>
@@ -130,7 +163,7 @@ object DocxExportHelper {
                     </pic:cNvPicPr>
                   </pic:nvPicPr>
                   <pic:blipFill>
-                    <a:blip r:embed="rId1"/>
+                    <a:blip r:embed="$relId"/>
                     <a:stretch>
                       <a:fillRect/>
                     </a:stretch>
@@ -138,16 +171,13 @@ object DocxExportHelper {
                   <pic:spPr>
                     <a:xfrm>
                       <a:off x="0" y="0"/>
-                      <a:ext cx="${cell.widthEmu}" cy="${cell.heightEmu}"/>
+                      <a:ext cx="${placed.widthEmu}" cy="${placed.heightEmu}"/>
                     </a:xfrm>
                     <a:prstGeom prst="rect">
                       <a:avLst/>
                     </a:prstGeom>
-                    <a:ln w="9525">
-                      <a:solidFill>
-                        <a:srgbClr val="D0D5DD"/>
-                      </a:solidFill>
-                      <a:prstDash val="dash"/>
+                    <a:ln>
+                      <a:noFill/>
                     </a:ln>
                   </pic:spPr>
                 </pic:pic>
@@ -160,11 +190,11 @@ object DocxExportHelper {
 """)
         }
 
-        // Section properties with A4 page size
+        // Section properties: A4 page size (11906 x 16838 dxa), margin 0.6 cm = 340 dxa
         sb.append("""
     <w:sectPr>
       <w:pgSz w:w="11906" w:h="16838" w:orient="portrait"/>
-      <w:pgMar w:top="567" w:right="567" w:bottom="567" w:left="567" w:header="0" w:footer="0" w:gutter="0"/>
+      <w:pgMar w:top="340" w:right="340" w:bottom="340" w:left="340" w:header="0" w:footer="0" w:gutter="0"/>
     </w:sectPr>
   </w:body>
 </w:document>

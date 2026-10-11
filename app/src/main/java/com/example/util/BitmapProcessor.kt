@@ -5,22 +5,34 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.DashPathEffect
-import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
+import android.net.Uri
 import com.example.model.A4GridPlan
-import com.example.model.PhotoDimension
-import com.example.model.SuitTransform
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.InputStream
 
 object BitmapProcessor {
 
     /**
-     * Crops the source bitmap to match the requested aspect ratio (width / height),
-     * keeping it centered.
+     * Loads a bitmap safely from a content URI.
+     */
+    fun loadBitmapFromUri(context: Context, uri: Uri): Bitmap? {
+        return try {
+            val inputStream: InputStream? = context.contentResolver.openInputStream(uri)
+            val bitmap = BitmapFactory.decodeStream(inputStream)
+            inputStream?.close()
+            bitmap
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    /**
+     * Crops source bitmap to exact target aspect ratio (width / height), keeping it centered.
      */
     fun cropToAspectRatio(source: Bitmap, targetRatio: Float): Bitmap {
         val srcWidth = source.width
@@ -31,11 +43,9 @@ object BitmapProcessor {
         val cropHeight: Int
 
         if (currentRatio > targetRatio) {
-            // Source is wider than target ratio: crop width
             cropHeight = srcHeight
             cropWidth = (srcHeight * targetRatio).toInt().coerceIn(1, srcWidth)
         } else {
-            // Source is taller than target ratio: crop height
             cropWidth = srcWidth
             cropHeight = (srcWidth / targetRatio).toInt().coerceIn(1, srcHeight)
         }
@@ -47,83 +57,12 @@ object BitmapProcessor {
     }
 
     /**
-     * Scales a bitmap to exact physical dimensions at 300 DPI.
-     */
-    fun scaleToDimension(source: Bitmap, dimension: PhotoDimension, dpi: Int = 300): Bitmap {
-        val targetWidth = dimension.getWidthPx(dpi)
-        val targetHeight = dimension.getHeightPx(dpi)
-        return Bitmap.createScaledBitmap(source, targetWidth, targetHeight, true)
-    }
-
-    /**
-     * Loads a suit drawable as a Bitmap.
-     */
-    fun loadSuitBitmap(context: Context, drawableResId: Int): Bitmap? {
-        if (drawableResId == 0) return null
-        return BitmapFactory.decodeResource(context.resources, drawableResId)
-    }
-
-    /**
-     * Composites the person photo with the superimposed suit overlay.
-     */
-    fun compositeSuit(
-        baseBitmap: Bitmap,
-        suitBitmap: Bitmap?,
-        transform: SuitTransform
-    ): Bitmap {
-        if (suitBitmap == null) return baseBitmap
-
-        val result = Bitmap.createBitmap(baseBitmap.width, baseBitmap.height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(result)
-
-        // Draw the person base
-        canvas.drawBitmap(baseBitmap, 0f, 0f, null)
-
-        // Matrix for suit overlay
-        val matrix = Matrix()
-
-        // Center suit on its own center
-        val suitW = suitBitmap.width.toFloat()
-        val suitH = suitBitmap.height.toFloat()
-        val baseW = baseBitmap.width.toFloat()
-        val baseH = baseBitmap.height.toFloat()
-
-        // Scale factor: suit relative to base photo
-        val scale = (baseW / suitW) * transform.scale
-        matrix.postScale(scale, scale)
-
-        val scaledSuitW = suitW * scale
-        val scaledSuitH = suitH * scale
-
-        // Rotate around center of the scaled suit
-        matrix.postRotate(
-            transform.rotation,
-            scaledSuitW / 2f,
-            scaledSuitH / 2f
-        )
-
-        // Translate to desired position
-        // Base center + user offset
-        val posX = (baseW - scaledSuitW) / 2f + transform.offsetX
-        val posY = (baseH * 0.42f) + transform.offsetY
-        matrix.postTranslate(posX, posY)
-
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
-            alpha = (transform.alpha.coerceIn(0f, 1f) * 255).toInt()
-        }
-
-        canvas.drawBitmap(suitBitmap, matrix, paint)
-        return result
-    }
-
-    /**
-     * Renders a complete high-resolution A4 sheet containing the grid of photos
-     * with 3 mm cut spacing and guidelines.
+     * Renders a complete high-resolution A4 sheet for photo paper (ورق صور مقوى)
+     * at 300 DPI without dashed borders, with 1 mm spacing and 0.6 cm margins.
      */
     suspend fun renderA4Sheet(
-        photoBitmap: Bitmap,
         plan: A4GridPlan,
-        drawCutGuides: Boolean = true,
+        pageIndex: Int = 0,
         dpi: Int = 300
     ): Bitmap = withContext(Dispatchers.Default) {
         val a4WidthPx = plan.getA4WidthPx(dpi)
@@ -132,62 +71,39 @@ object BitmapProcessor {
         val a4Bitmap = Bitmap.createBitmap(a4WidthPx, a4HeightPx, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(a4Bitmap)
 
-        // Clean white background
+        // Pure white background for photo paper
         canvas.drawColor(Color.WHITE)
 
-        val borderPaint = Paint().apply {
-            color = Color.rgb(200, 205, 215)
-            style = Paint.Style.STROKE
-            strokeWidth = (dpi / 300f * 1.5f).coerceAtLeast(1f)
-            pathEffect = DashPathEffect(floatArrayOf(12f, 8f), 0f)
-        }
+        val photoPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG or Paint.DITHER_FLAG)
 
-        val cutGuidePaint = Paint().apply {
-            color = Color.rgb(160, 170, 185)
-            strokeWidth = (dpi / 300f * 1.5f).coerceAtLeast(1f)
-            style = Paint.Style.STROKE
-        }
+        val pagePhotos = plan.placedPhotos.filter { it.pageIndex == pageIndex }
 
-        val cornerMarkerLen = (plan.spacingCm / 2.54f * dpi * 0.8f).coerceAtLeast(10f)
+        // Cache cropped bitmaps for performance
+        val croppedCache = mutableMapOf<String, Bitmap>()
 
-        // Draw each photo cell
-        for (cell in plan.cells) {
-            val cellX = cell.xPx(dpi).toFloat()
-            val cellY = cell.yPx(dpi).toFloat()
-            val cellW = cell.widthPx(dpi).toFloat()
-            val cellH = cell.heightPx(dpi).toFloat()
+        for (placed in pagePhotos) {
+            val item = placed.photoItem
+            val sourceBitmap = item.sourceBitmap ?: continue
+            val cacheKey = "${item.id}_${item.widthCm}_${item.heightCm}"
+
+            val cropped = croppedCache.getOrPut(cacheKey) {
+                cropToAspectRatio(sourceBitmap, item.aspectRatio)
+            }
+
+            val cellX = placed.xPx(dpi).toFloat()
+            val cellY = placed.yPx(dpi).toFloat()
+            val cellW = placed.widthPx(dpi).toFloat()
+            val cellH = placed.heightPx(dpi).toFloat()
 
             val destRect = RectF(cellX, cellY, cellX + cellW, cellY + cellH)
 
-            // Draw photo
+            // Draw photo with zero borders or dashed lines as requested
             canvas.drawBitmap(
-                photoBitmap,
-                Rect(0, 0, photoBitmap.width, photoBitmap.height),
+                cropped,
+                Rect(0, 0, cropped.width, cropped.height),
                 destRect,
-                Paint(Paint.FILTER_BITMAP_FLAG)
+                photoPaint
             )
-
-            if (drawCutGuides) {
-                // Dashed border around the photo
-                canvas.drawRect(destRect, borderPaint)
-
-                // Corner crosshairs / cut guide markers outside the 3mm margin
-                // Top-left
-                canvas.drawLine(cellX - 8f, cellY, cellX - 8f - cornerMarkerLen, cellY, cutGuidePaint)
-                canvas.drawLine(cellX, cellY - 8f, cellX, cellY - 8f - cornerMarkerLen, cutGuidePaint)
-
-                // Top-right
-                canvas.drawLine(cellX + cellW + 8f, cellY, cellX + cellW + 8f + cornerMarkerLen, cellY, cutGuidePaint)
-                canvas.drawLine(cellX + cellW, cellY - 8f, cellX + cellW, cellY - 8f - cornerMarkerLen, cutGuidePaint)
-
-                // Bottom-left
-                canvas.drawLine(cellX - 8f, cellY + cellH, cellX - 8f - cornerMarkerLen, cellY + cellH, cutGuidePaint)
-                canvas.drawLine(cellX, cellY + cellH + 8f, cellX, cellY + cellH + 8f + cornerMarkerLen, cutGuidePaint)
-
-                // Bottom-right
-                canvas.drawLine(cellX + cellW + 8f, cellY + cellH, cellX + cellW + 8f + cornerMarkerLen, cellY + cellH, cutGuidePaint)
-                canvas.drawLine(cellX + cellW, cellY + cellH + 8f, cellX + cellW, cellY + cellH + 8f + cornerMarkerLen, cutGuidePaint)
-            }
         }
 
         a4Bitmap

@@ -2,6 +2,7 @@ package com.example
 
 import com.example.model.A4GridPlan
 import com.example.model.PhotoDimension
+import com.example.model.PrintPhotoItem
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -23,30 +24,45 @@ class ExampleUnitTest {
     }
 
     @Test
-    fun testA4GridPlanCalculations() {
-        val dim = PhotoDimension("3x4 cm", 3.0f, 4.0f)
-        val plan = A4GridPlan.calculate(
-            dimension = dim,
-            spacingCm = 0.3f, // 3 mm cut spacing
-            marginCm = 1.0f
+    fun testA4GridPlanMultiCalculations() {
+        val item1 = PrintPhotoItem(
+            name = "صورة 1",
+            sourceBitmap = null,
+            widthCm = 3.0f,
+            heightCm = 4.0f,
+            copiesCount = 12
         )
 
-        // Check cols and rows
-        assertTrue(plan.cols >= 4)
-        assertTrue(plan.rows >= 5)
-        assertEquals(plan.cols * plan.rows, plan.maxCount)
+        val plan = A4GridPlan.calculate(
+            items = listOf(item1),
+            marginCm = 0.6f,
+            spacingCm = 0.1f // 1 mm spacing
+        )
 
-        // Check cell spacing
-        if (plan.cells.size >= 2) {
-            val cell0 = plan.cells[0]
-            val cell1 = plan.cells[1]
-            val actualSpacing = cell1.xCm - (cell0.xCm + cell0.widthCm)
-            assertEquals(0.3f, actualSpacing, 0.01f)
-        }
+        assertEquals(12, plan.totalPhotosCount)
+        assertTrue(plan.placedPhotos.size >= 12)
 
-        // Check EMU conversion: 1 cm = 360,000 EMU
-        val firstCell = plan.cells.first()
-        assertEquals((3.0f * 360000L).toLong(), firstCell.widthEmu)
-        assertEquals((4.0f * 360000L).toLong(), firstCell.heightEmu)
+        // Check first row: exactly 6 photos of 3cm
+        val firstRowPhotos = plan.placedPhotos.filter { it.yCm == 0.6f }
+        assertEquals(6, firstRowPhotos.size)
+
+        // Check horizontal 1mm (0.1 cm) spacing between photo 0 and photo 1
+        val photo0 = firstRowPhotos[0]
+        val photo1 = firstRowPhotos[1]
+        val spacing = photo1.xCm - (photo0.xCm + photo0.widthCm)
+        assertEquals(0.1f, spacing, 0.01f)
+
+        // Check starting margin: exactly 0.6 cm
+        assertEquals(0.6f, photo0.xCm, 0.01f)
+        assertEquals(0.6f, photo0.yCm, 0.01f)
+
+        // Check second row Y coordinate: 0.6 + 4.0 + 0.1 = 4.7 cm
+        val secondRowPhotos = plan.placedPhotos.filter { it.yCm > 0.6f }
+        val secondRowFirstPhoto = secondRowPhotos.first()
+        assertEquals(4.7f, secondRowFirstPhoto.yCm, 0.01f)
+
+        // Check EMU conversions: 1 cm = 360,000 EMU
+        assertEquals((3.0f * 360000L).toLong(), photo0.widthEmu)
+        assertEquals((4.0f * 360000L).toLong(), photo0.heightEmu)
     }
 }

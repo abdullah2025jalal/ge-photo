@@ -1,9 +1,11 @@
 package com.example.model
 
-data class GridCell(
-    val row: Int,
-    val col: Int,
-    val index: Int,
+import kotlin.math.max
+
+data class PlacedPhotoInstance(
+    val photoItem: PrintPhotoItem,
+    val instanceIndex: Int,
+    val pageIndex: Int,
     val xCm: Float,
     val yCm: Float,
     val widthCm: Float,
@@ -15,7 +17,7 @@ data class GridCell(
     val widthEmu: Long get() = (widthCm * 360000L).toLong()
     val heightEmu: Long get() = (heightCm * 360000L).toLong()
 
-    // Pixel coordinates at given DPI (default 300 DPI)
+    // 300 DPI high resolution pixels
     fun xPx(dpi: Int = 300): Int = ((xCm / 2.54f) * dpi).toInt()
     fun yPx(dpi: Int = 300): Int = ((yCm / 2.54f) * dpi).toInt()
     fun widthPx(dpi: Int = 300): Int = ((widthCm / 2.54f) * dpi).toInt()
@@ -23,86 +25,101 @@ data class GridCell(
 }
 
 data class A4GridPlan(
-    val dimension: PhotoDimension,
     val pageWidthCm: Float = 21.0f,
     val pageHeightCm: Float = 29.7f,
-    val spacingCm: Float = 0.3f, // 3 mm as specified by user
-    val marginCm: Float = 1.0f,
-    val maxCount: Int,
-    val selectedCount: Int,
-    val cols: Int,
-    val rows: Int,
-    val cells: List<GridCell>
+    val marginCm: Float = 0.6f,        // 0.6 cm cropped margin around sheet
+    val spacingCm: Float = 0.1f,       // 1 mm spacing between photos and rows
+    val placedPhotos: List<PlacedPhotoInstance>,
+    val totalPhotosCount: Int,
+    val totalPagesCount: Int
 ) {
-    // A4 dimensions in EMUs
     val pageWidthEmu: Long = (pageWidthCm * 360000L).toLong()
     val pageHeightEmu: Long = (pageHeightCm * 360000L).toLong()
 
-    // A4 dimensions in pixels at 300 DPI: (21.0 / 2.54) * 300 ≈ 2480 px, (29.7 / 2.54) * 300 ≈ 3508 px
+    // High quality 300 DPI dimensions: 21.0 / 2.54 * 300 ≈ 2480 px, 29.7 / 2.54 * 300 ≈ 3508 px
     fun getA4WidthPx(dpi: Int = 300): Int = ((pageWidthCm / 2.54f) * dpi).toInt()
     fun getA4HeightPx(dpi: Int = 300): Int = ((pageHeightCm / 2.54f) * dpi).toInt()
 
     companion object {
         fun calculate(
-            dimension: PhotoDimension,
-            requestedCount: Int? = null,
-            spacingCm: Float = 0.3f, // 3 mm
-            marginCm: Float = 1.0f
+            items: List<PrintPhotoItem>,
+            marginCm: Float = 0.6f,   // 0.6 cm margins
+            spacingCm: Float = 0.1f   // 1 mm (0.1 cm) spacing
         ): A4GridPlan {
             val pageWidth = 21.0f
             val pageHeight = 29.7f
 
-            val availableWidth = pageWidth - (marginCm * 2f)
-            val availableHeight = pageHeight - (marginCm * 2f)
+            val minX = marginCm
+            val maxX = pageWidth - marginCm
+            val minY = marginCm
+            val maxY = pageHeight - marginCm
 
-            // Number of photos per row: (availableWidth + spacing) / (photoWidth + spacing)
-            val cols = ((availableWidth + spacingCm) / (dimension.widthCm + spacingCm)).toInt().coerceAtLeast(1)
-            // Number of photos per column
-            val rows = ((availableHeight + spacingCm) / (dimension.heightCm + spacingCm)).toInt().coerceAtLeast(1)
+            val placed = mutableListOf<PlacedPhotoInstance>()
+            var currentPage = 0
+            var currentX = minX
+            var currentY = minY
+            var currentRowMaxHeight = 0f
+            var photosInCurrentRow = 0
+            var globalIndex = 0
 
-            val maxPossible = cols * rows
-            val count = requestedCount?.coerceIn(1, maxPossible) ?: maxPossible
+            // Expand all copies for each photo item
+            for (item in items) {
+                val w = item.widthCm.coerceAtLeast(1.0f)
+                val h = item.heightCm.coerceAtLeast(1.0f)
 
-            // Center the entire grid within the page
-            val totalGridWidth = (cols * dimension.widthCm) + ((cols - 1) * spacingCm)
-            val totalGridHeight = (rows * dimension.heightCm) + ((rows - 1) * spacingCm)
-            val startX = (pageWidth - totalGridWidth) / 2f
-            val startY = (pageHeight - totalGridHeight) / 2f
+                for (copy in 0 until item.copiesCount) {
+                    // Check if photo fits in the current row:
+                    // Max 6 photos per row for 3cm photos, or if currentX + w > maxX
+                    val exceedsWidth = (currentX + w) > (maxX + 0.01f)
+                    val reachesMaxFor3cm = (w <= 3.05f && photosInCurrentRow >= 6)
 
-            val cells = mutableListOf<GridCell>()
-            var index = 0
-            for (r in 0 until rows) {
-                for (c in 0 until cols) {
-                    if (index < count) {
-                        val x = startX + c * (dimension.widthCm + spacingCm)
-                        val y = startY + r * (dimension.heightCm + spacingCm)
-                        cells.add(
-                            GridCell(
-                                row = r,
-                                col = c,
-                                index = index,
-                                xCm = x,
-                                yCm = y,
-                                widthCm = dimension.widthCm,
-                                heightCm = dimension.heightCm
-                            )
-                        )
-                        index++
+                    if (exceedsWidth || reachesMaxFor3cm) {
+                        // Move to next row
+                        currentX = minX
+                        currentY += currentRowMaxHeight + spacingCm
+                        currentRowMaxHeight = 0f
+                        photosInCurrentRow = 0
                     }
+
+                    // Check if exceeds page height:
+                    if ((currentY + h) > (maxY + 0.01f)) {
+                        // Move to next page
+                        currentPage++
+                        currentX = minX
+                        currentY = minY
+                        currentRowMaxHeight = 0f
+                        photosInCurrentRow = 0
+                    }
+
+                    placed.add(
+                        PlacedPhotoInstance(
+                            photoItem = item,
+                            instanceIndex = globalIndex,
+                            pageIndex = currentPage,
+                            xCm = currentX,
+                            yCm = currentY,
+                            widthCm = w,
+                            heightCm = h
+                        )
+                    )
+
+                    globalIndex++
+                    photosInCurrentRow++
+                    currentRowMaxHeight = max(currentRowMaxHeight, h)
+                    currentX += w + spacingCm
                 }
             }
 
+            val totalPages = if (placed.isEmpty()) 1 else (currentPage + 1)
+
             return A4GridPlan(
-                dimension = dimension,
                 pageWidthCm = pageWidth,
                 pageHeightCm = pageHeight,
-                spacingCm = spacingCm,
                 marginCm = marginCm,
-                maxCount = maxPossible,
-                selectedCount = count,
-                cols = cols,
-                rows = rows,
-                cells = cells
+                spacingCm = spacingCm,
+                placedPhotos = placed,
+                totalPhotosCount = placed.size,
+                totalPagesCount = totalPages
             )
         }
     }
