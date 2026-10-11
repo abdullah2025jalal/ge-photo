@@ -1,0 +1,6 @@
+{
+  "name": "PhotoGrid Studio",
+  "description": "Professional photo app with custom dimensions, white background cutout, formal suits and school uniforms overlay, and A4 DOCX print grid generation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
