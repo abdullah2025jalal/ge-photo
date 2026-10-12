@@ -18,3 +18,6 @@ local.properties
 debug.keystore
 .build-outputs
 firebase-debug.log
+*service-account*.json
+credentials.json
+.firebase/
