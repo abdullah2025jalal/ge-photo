@@ -70,7 +70,7 @@
         <img src="icon-192.png" alt="Icon" class="w-10 h-10 rounded-xl shadow border border-slate-600">
         <div>
           <h1 class="font-extrabold text-base sm:text-lg text-white">استوديو طباعة شبكة الصور A4</h1>
-          <p class="text-xs text-sky-400">ورق مقوى | مسافة 1 ملم | تصدير ومشاركة Word (.docx) فوري | v4.0</p>
+          <p class="text-xs text-sky-400">ورق مقوى | مسافة 1 ملم | تصدير ومشاركة Word (.docx) أصلي | v5.0</p>
         </div>
       </div>
       <div class="flex items-center gap-2">
@@ -312,25 +312,40 @@
       </div>
 
       <!-- Native Share Button (Main Trigger) -->
-      <button id="btnNativeShareTrigger" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 px-4 rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 transition mb-3">
-        <span class="text-lg">📲</span> <span>مشاركة الملف عبر التطبيقات (تيليجرام، واتساب، بلوتوث...)</span>
+      <button id="btnNativeShareTrigger" class="w-full bg-gradient-to-r from-blue-600 to-sky-600 hover:from-blue-500 hover:to-sky-500 text-white font-bold py-3.5 px-4 rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 transition mb-3">
+        <span class="text-xl">📲</span> <span class="font-bold">إرسال ملف المستند (Word) عبر التطبيقات الآن</span>
       </button>
+
+      <!-- Clear instructions & WhatsApp/Telegram direct file guide -->
+      <div class="bg-blue-950/60 border border-blue-600/40 rounded-xl p-3 text-xs text-blue-200 leading-relaxed mb-4 space-y-2">
+        <div class="flex items-start gap-2">
+          <span class="text-emerald-400 text-base">✔️</span>
+          <div>
+            <b>تم تنزيل ملف .docx حقيقي غير مضغوط بنجاح في مجلد التنزيلات (Downloads).</b>
+          </div>
+        </div>
+        <div class="flex items-start gap-2">
+          <span class="text-sky-400 text-base">📌</span>
+          <div>
+            <b>لإرسال الملف كملف مستند حقيقي في واتساب أو تيليجرام:</b>
+            <div class="text-[11px] text-slate-300 mt-1 space-y-1">
+              <div>1. اضغط الزر الأزرق أعلاه (إذا كان متصفحك يدعم نافذة المشاركة المباشرة).</div>
+              <div>2. أو افتح المحادثة في واتساب / تيليجرام، اضغط علامة <b>الدبوس 📎 (إرفاق)</b> ثم اختر <b>مستند (Document)</b> ثم اختر ملف <b><span id="shareGuideFileName" class="font-mono text-amber-300">PhotoGrid_A4.docx</span></b> من التنزيلات.</div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <!-- Quick Action Buttons for Apps -->
       <div class="grid grid-cols-2 gap-2 mb-4">
         <!-- WhatsApp -->
         <a id="btnShareWhatsApp" href="#" target="_blank" class="bg-[#25D366]/20 hover:bg-[#25D366]/30 text-[#25D366] border border-[#25D366]/40 font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-2 transition">
-          <span class="text-base">💬</span> <span>واتساب (WhatsApp)</span>
+          <span class="text-base">💬</span> <span>فتح واتساب</span>
         </a>
         <!-- Telegram -->
         <a id="btnShareTelegram" href="#" target="_blank" class="bg-[#229ED9]/20 hover:bg-[#229ED9]/30 text-[#229ED9] border border-[#229ED9]/40 font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-2 transition">
-          <span class="text-base">✈️</span> <span>تيليجرام (Telegram)</span>
+          <span class="text-base">✈️</span> <span>فتح تيليجرام</span>
         </a>
-      </div>
-
-      <!-- Helper tip -->
-      <div class="bg-blue-950/40 border border-blue-800/40 rounded-xl p-3 text-[11px] text-blue-200/90 leading-relaxed mb-4">
-        💡 <b>ملاحظة:</b> تم حفظ الملف مباشرة في مجلد التنزيلات بجهازك بصيغة Word. للمشاركة عبر <b>البلوتوث</b> أو <b>تيليجرام</b> أو <b>واتساب</b>، اضغط الزر الأزرق بالأعلى، أو اختر "إرفاق مستند" داخل أي محادثة.
       </div>
 
       <div class="flex justify-between items-center pt-2 border-t border-slate-700/60">
@@ -382,7 +397,7 @@
     // Service Worker Registration & PWA Install Prompt handling
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js?v=4').then(reg => {
+        navigator.serviceWorker.register('sw.js?v=5').then(reg => {
           reg.update();
         }).catch(err => console.log('SW reg fail', err));
       });
@@ -1093,6 +1108,9 @@
 
         // Populate share modal data
         document.getElementById('shareModalFileName').textContent = fileName;
+        if (document.getElementById('shareGuideFileName')) {
+          document.getElementById('shareGuideFileName').textContent = fileName;
+        }
         const shareText = encodeURIComponent(`ملف Word (.docx) لطباعة شبكة الصور والمستندات A4: ${fileName}`);
         document.getElementById('btnShareWhatsApp').href = `https://api.whatsapp.com/send?text=${shareText}`;
         document.getElementById('btnShareTelegram').href = `https://t.me/share/url?text=${shareText}`;
@@ -1101,45 +1119,59 @@
         // Native share function (Exact Android intent experience)
         const triggerNativeShare = async () => {
           if (!navigator.share) {
+            showToast('المشاركة المباشرة غير مدعومة في هذا المتصفح - يمكنك إرفاق الملف من التنزيلات', 'ℹ️');
             return false;
           }
 
-          let canShareDirectFile = false;
+          // Build candidates with different MIME interpretations for maximum browser compatibility
+          const candidateFiles = [
+            docxFile,
+            new File([docxBlob], fileName, { type: 'application/msword', lastModified: Date.now() }),
+            new File([docxBlob], fileName, { type: 'application/octet-stream', lastModified: Date.now() })
+          ];
+
+          let shareableFile = null;
           if (navigator.canShare) {
-            try {
-              canShareDirectFile = navigator.canShare({ files: [docxFile] });
-            } catch (e) {
-              canShareDirectFile = false;
+            for (const candidate of candidateFiles) {
+              try {
+                if (navigator.canShare({ files: [candidate] })) {
+                  shareableFile = candidate;
+                  break;
+                }
+              } catch (e) {
+                // Continue checking other candidates
+              }
             }
+          } else {
+            shareableFile = docxFile;
           }
 
-          // 1. Try direct file share first (e.g. iOS Safari, modern mobile browsers)
-          if (canShareDirectFile) {
+          // 1. Try direct file share first (pass ONLY files array so apps receive the true file, not just text)
+          if (shareableFile) {
             try {
               await navigator.share({
-                files: [docxFile],
-                title: 'ملف Word (.docx) - PhotoGrid Studio',
-                text: 'ملف طباعة شبكة الصور والمستندات A4 جاهز للطباعة'
+                files: [shareableFile]
               });
               return true;
             } catch (err) {
               if (err.name === 'AbortError') return true; // Dismissed by user
-              console.warn('Native file share error:', err);
+              console.warn('Native file-only share error, trying with title:', err);
+              try {
+                await navigator.share({
+                  files: [shareableFile],
+                  title: fileName
+                });
+                return true;
+              } catch (e2) {
+                if (e2.name === 'AbortError') return true;
+                console.warn('Native file share retry error:', e2);
+              }
             }
           }
 
-          // 2. Fallback: Launch system share chooser for WhatsApp, Telegram, Bluetooth, etc.
-          try {
-            await navigator.share({
-              title: `ملف Word: ${fileName}`,
-              text: `تم تنزيل مستند Word (.docx) الأصلي: ${fileName}\n(جاهز للمشاركة والطباعة من مجلد التنزيلات)`,
-            });
-            return true;
-          } catch (err) {
-            if (err.name === 'AbortError') return true;
-            console.warn('Native chooser share error:', err);
-          }
-
+          // 2. If browser cannot send .docx files via Web Share API directly
+          // Inform user clearly instead of sending plain text into WhatsApp/Telegram!
+          showToast('يرجى اختيار "إرفاق مستند" داخل تيليجرام أو واتساب لإرسال ملف DOCX الحقيقي', '📎');
           return false;
         };
 
