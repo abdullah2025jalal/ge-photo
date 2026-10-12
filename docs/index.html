@@ -70,7 +70,7 @@
         <img src="icon-192.png" alt="Icon" class="w-10 h-10 rounded-xl shadow border border-slate-600">
         <div>
           <h1 class="font-extrabold text-base sm:text-lg text-white">استوديو طباعة شبكة الصور A4</h1>
-          <p class="text-xs text-sky-400">ورق مقوى | مسافة 1 ملم | تصدير ومشاركة Word (.docx) أصلي | v5.1</p>
+          <p class="text-xs text-sky-400">ورق مقوى | مسافة 1 ملم | تصدير ومشاركة Word (.docx) أصلي | v5.2</p>
         </div>
       </div>
       <div class="flex items-center gap-2">
@@ -141,14 +141,17 @@
       <!-- Sticky Export Footer -->
       <div class="sticky bottom-0 bg-slate-800/95 backdrop-blur p-4 rounded-2xl border border-slate-700 shadow-2xl mt-4">
         <div class="flex flex-col sm:flex-row gap-2">
-          <button id="btnExportDocx" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg transition">
-            📄 <span>تحميل ومشاركة ملف Word (.docx) - التفاف أمام النص</span>
+          <button id="btnShareDocx" class="flex-1 bg-gradient-to-r from-blue-600 to-sky-600 hover:from-blue-500 hover:to-sky-500 text-white font-bold py-3 px-4 rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 transition">
+            <span class="text-lg">📲</span> <span>مشاركة ملف Word (.docx)</span>
           </button>
-          <button id="btnSaveAllImages" class="bg-slate-700 hover:bg-slate-600 text-sky-300 font-bold py-3 px-4 rounded-xl text-sm flex items-center justify-center gap-2 transition">
-            💾 <span>حفظ كافة الأوراق (300 DPI)</span>
+          <button id="btnDownloadDocx" class="bg-slate-700 hover:bg-slate-600 text-sky-300 font-bold py-3 px-4 rounded-xl text-sm flex items-center justify-center gap-2 transition">
+            <span>📥</span> <span>تنزيل Word (.docx)</span>
           </button>
-          <button onclick="window.print()" class="bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 px-4 rounded-xl text-sm flex items-center justify-center gap-2 transition">
-            🖨️ <span>طباعة</span>
+          <button id="btnSaveAllImages" class="bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold py-3 px-3 rounded-xl text-sm flex items-center justify-center gap-2 transition">
+            <span>💾</span> <span>حفظ صور (300 DPI)</span>
+          </button>
+          <button onclick="window.print()" class="bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold py-3 px-3 rounded-xl text-sm flex items-center justify-center gap-2 transition">
+            <span>🖨️</span> <span>طباعة</span>
           </button>
         </div>
       </div>
@@ -273,88 +276,6 @@
       <div class="flex justify-end gap-2">
         <button onclick="closeModal('modalAddDocument')" class="text-slate-400 hover:text-white px-4 py-2 text-sm">إلغاء</button>
         <button id="btnSaveDocument" class="bg-sky-600 hover:bg-sky-500 text-white font-bold px-4 py-2 rounded-xl text-sm shadow">إضافة المستند</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ==================== MODAL: SHARE DOCX (مشاركة ملف Word) ==================== -->
-  <div id="modalShareDocx" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm hidden flex items-center justify-center p-4">
-    <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-md w-full p-5 shadow-2xl relative text-right">
-      <!-- Close button -->
-      <button onclick="closeModal('modalShareDocx')" class="absolute top-4 left-4 text-slate-400 hover:text-white text-xl">✕</button>
-
-      <div class="flex items-center gap-3 mb-4">
-        <div class="w-12 h-12 rounded-xl bg-blue-600/20 border border-blue-500/40 text-blue-400 flex items-center justify-center text-2xl font-bold">
-          📄
-        </div>
-        <div>
-          <h3 class="text-base font-bold text-white">تم تصدير ملف Word (.docx)</h3>
-          <p class="text-xs text-emerald-400 font-semibold flex items-center gap-1">
-            <span>✓</span> <span>تم تنزيل الملف بصيغة DOCX رسمية غير مضغوطة</span>
-          </p>
-        </div>
-      </div>
-
-      <!-- File info badge -->
-      <div class="bg-slate-900 border border-slate-700 rounded-xl p-3 mb-4 space-y-2 text-xs">
-        <div class="flex justify-between items-center text-slate-300">
-          <span class="text-slate-400">اسم الملف:</span>
-          <span id="shareModalFileName" class="font-mono text-sky-300 font-bold truncate max-w-[210px]">PhotoGrid_A4.docx</span>
-        </div>
-        <div class="flex justify-between items-center text-slate-300">
-          <span class="text-slate-400">صيغة الملف:</span>
-          <span class="text-emerald-400 font-bold">مستند Word (.docx) أصلي جاهز للطباعة</span>
-        </div>
-        <div class="flex justify-between items-center text-slate-300">
-          <span class="text-slate-400">المكان المحفوظ فيه:</span>
-          <span class="text-slate-200">مجلد التنزيلات (Downloads) بجهازك</span>
-        </div>
-      </div>
-
-      <!-- Native Share Button (Main Trigger) -->
-      <button id="btnNativeShareTrigger" class="w-full bg-gradient-to-r from-blue-600 to-sky-600 hover:from-blue-500 hover:to-sky-500 text-white font-bold py-3.5 px-4 rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 transition mb-3">
-        <span class="text-xl">📲</span> <span class="font-bold">إرسال ملف المستند (Word) عبر التطبيقات الآن</span>
-      </button>
-
-      <!-- Clear instructions & WhatsApp/Telegram direct file guide -->
-      <div class="bg-blue-950/60 border border-blue-600/40 rounded-xl p-3 text-xs text-blue-200 leading-relaxed mb-4 space-y-2">
-        <div class="flex items-start gap-2">
-          <span class="text-emerald-400 text-base">✔️</span>
-          <div>
-            <b>تم تنزيل ملف .docx حقيقي غير مضغوط بنجاح في مجلد التنزيلات (Downloads).</b>
-          </div>
-        </div>
-        <div class="flex items-start gap-2">
-          <span class="text-sky-400 text-base">📌</span>
-          <div>
-            <b>لإرسال الملف كملف مستند حقيقي في واتساب أو تيليجرام:</b>
-            <div class="text-[11px] text-slate-300 mt-1 space-y-1">
-              <div>1. اضغط الزر الأزرق أعلاه (إذا كان متصفحك يدعم نافذة المشاركة المباشرة).</div>
-              <div>2. أو افتح المحادثة في واتساب / تيليجرام، اضغط علامة <b>الدبوس 📎 (إرفاق)</b> ثم اختر <b>مستند (Document)</b> ثم اختر ملف <b><span id="shareGuideFileName" class="font-mono text-amber-300">PhotoGrid_A4.docx</span></b> من التنزيلات.</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Quick Action Buttons for Apps -->
-      <div class="grid grid-cols-2 gap-2 mb-4">
-        <!-- WhatsApp -->
-        <button id="btnShareWhatsApp" type="button" class="bg-[#25D366]/20 hover:bg-[#25D366]/30 text-[#25D366] border border-[#25D366]/40 font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-2 transition cursor-pointer">
-          <span class="text-base">💬</span> <span>فتح تطبيق واتساب</span>
-        </button>
-        <!-- Telegram -->
-        <button id="btnShareTelegram" type="button" class="bg-[#229ED9]/20 hover:bg-[#229ED9]/30 text-[#229ED9] border border-[#229ED9]/40 font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-2 transition cursor-pointer">
-          <span class="text-base">✈️</span> <span>فتح تطبيق تيليجرام</span>
-        </button>
-      </div>
-
-      <div class="flex justify-between items-center pt-2 border-t border-slate-700/60">
-        <button id="btnRedownloadDocx" class="text-sky-400 hover:text-sky-300 text-xs font-semibold flex items-center gap-1">
-          <span>📥</span> <span>إعادة تنزيل الملف</span>
-        </button>
-        <button onclick="closeModal('modalShareDocx')" class="bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold px-4 py-2 rounded-lg transition">
-          إغلاق
-        </button>
       </div>
     </div>
   </div>
@@ -915,71 +836,59 @@
       }, 5000);
     }
 
-    // ==================== EXPORT WORD DOCX (.docx) IN BROWSER ====================
-    document.getElementById('btnExportDocx').addEventListener('click', async () => {
-      if (items.length === 0) {
-        alert('أضف عناصر أولاً');
-        return;
+    // ==================== EXPORT & SHARE WORD DOCX (.docx) ====================
+    async function generateDocxBlob() {
+      const plan = calculateA4Plan();
+      const zip = new JSZip();
+
+      // Collect unique bitmaps (handling back face placeholder if needed)
+      const faces = [];
+      const faceMap = new Map();
+
+      plan.placed.forEach(p => {
+        const key = `${p.item.id}_${p.isBack ? 'back' : 'front'}`;
+        let img = p.isBack ? p.item.backBitmap : p.item.sourceBitmap;
+        if (!img && p.isBack) {
+          const ph = document.createElement('canvas');
+          ph.width = 600;
+          ph.height = Math.round(600 * (p.h / p.w));
+          const pctx = ph.getContext('2d');
+          pctx.fillStyle = '#F8FAFC';
+          pctx.fillRect(0, 0, ph.width, ph.height);
+          pctx.strokeStyle = '#CBD5E1';
+          pctx.lineWidth = 4;
+          pctx.strokeRect(0, 0, ph.width, ph.height);
+          pctx.fillStyle = '#64748B';
+          pctx.font = 'bold 24px Cairo, sans-serif';
+          pctx.textAlign = 'center';
+          pctx.fillText('الوجه الخلفي للمستند', ph.width / 2, ph.height / 2 + 8);
+          img = ph;
+        }
+        if (img && !faceMap.has(key)) {
+          const relId = `rId${faces.length + 1}`;
+          faceMap.set(key, relId);
+          faces.push({ key, img, relId, w: p.w, h: p.h });
+        }
+      });
+
+      // Render each face to PNG bytes
+      for (const f of faces) {
+        const c = document.createElement('canvas');
+        c.width = 600;
+        c.height = Math.round(600 * (f.h / f.w));
+        const ctx = c.getContext('2d');
+        if (f.img instanceof HTMLCanvasElement) {
+          ctx.drawImage(f.img, 0, 0, c.width, c.height);
+        } else {
+          drawCroppedImage(ctx, f.img, 0, 0, c.width, c.height);
+        }
+        const dataUrl = c.toDataURL('image/png');
+        const b64 = dataUrl.split(',')[1];
+        zip.file(`word/media/image_${faces.indexOf(f) + 1}.png`, b64, { base64: true });
       }
 
-      const btn = document.getElementById('btnExportDocx');
-      const originalHtml = btn.innerHTML;
-      btn.disabled = true;
-      btn.innerHTML = '<span>⏳</span> <span>جاري إنشاء ملف Word (.docx)...</span>';
-
-      try {
-        const plan = calculateA4Plan();
-        const zip = new JSZip();
-
-        // Collect unique bitmaps (handling back face placeholder if needed)
-        const faces = [];
-        const faceMap = new Map();
-
-        plan.placed.forEach(p => {
-          const key = `${p.item.id}_${p.isBack ? 'back' : 'front'}`;
-          let img = p.isBack ? p.item.backBitmap : p.item.sourceBitmap;
-          if (!img && p.isBack) {
-            const ph = document.createElement('canvas');
-            ph.width = 600;
-            ph.height = Math.round(600 * (p.h / p.w));
-            const pctx = ph.getContext('2d');
-            pctx.fillStyle = '#F8FAFC';
-            pctx.fillRect(0, 0, ph.width, ph.height);
-            pctx.strokeStyle = '#CBD5E1';
-            pctx.lineWidth = 4;
-            pctx.strokeRect(0, 0, ph.width, ph.height);
-            pctx.fillStyle = '#64748B';
-            pctx.font = 'bold 24px Cairo, sans-serif';
-            pctx.textAlign = 'center';
-            pctx.fillText('الوجه الخلفي للمستند', ph.width / 2, ph.height / 2 + 8);
-            img = ph;
-          }
-          if (img && !faceMap.has(key)) {
-            const relId = `rId${faces.length + 1}`;
-            faceMap.set(key, relId);
-            faces.push({ key, img, relId, w: p.w, h: p.h });
-          }
-        });
-
-        // Render each face to PNG bytes
-        const imageBytes = [];
-        for (const f of faces) {
-          const c = document.createElement('canvas');
-          c.width = 600;
-          c.height = Math.round(600 * (f.h / f.w));
-          const ctx = c.getContext('2d');
-          if (f.img instanceof HTMLCanvasElement) {
-            ctx.drawImage(f.img, 0, 0, c.width, c.height);
-          } else {
-            drawCroppedImage(ctx, f.img, 0, 0, c.width, c.height);
-          }
-          const dataUrl = c.toDataURL('image/png');
-          const b64 = dataUrl.split(',')[1];
-          zip.file(`word/media/image_${faces.indexOf(f) + 1}.png`, b64, { base64: true });
-        }
-
-        // [Content_Types].xml
-        zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      // [Content_Types].xml
+      zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
@@ -987,23 +896,23 @@
   <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
 </Types>`);
 
-        // _rels/.rels
-        zip.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      // _rels/.rels
+      zip.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
 </Relationships>`);
 
-        // word/_rels/document.xml.rels
-        let docRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      // word/_rels/document.xml.rels
+      let docRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`;
-        faces.forEach((f, idx) => {
-          docRels += `\n  <Relationship Id="${f.relId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image_${idx + 1}.png"/>`;
-        });
-        docRels += '\n</Relationships>';
-        zip.file('word/_rels/document.xml.rels', docRels);
+      faces.forEach((f, idx) => {
+        docRels += `\n  <Relationship Id="${f.relId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image_${idx + 1}.png"/>`;
+      });
+      docRels += '\n</Relationships>';
+      zip.file('word/_rels/document.xml.rels', docRels);
 
-        // word/document.xml (In Front of Text with <wp:anchor behindDoc="0">)
-        let docXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      // word/document.xml (In Front of Text with <wp:anchor behindDoc="0">)
+      let docXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
             xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
             xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
@@ -1011,22 +920,22 @@
             xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
   <w:body>`;
 
-        for (let p = 0; p < plan.totalPages; p++) {
-          if (p > 0) {
-            docXml += `\n    <w:p><w:r><w:br w:type="page"/></w:r></w:p>`;
-          }
-          docXml += `\n    <w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>`;
-          const pagePhotos = plan.placed.filter(item => item.pageIndex === p);
-          pagePhotos.forEach(item => {
-            const key = `${item.item.id}_${item.isBack ? 'back' : 'front'}`;
-            const relId = faceMap.get(key) || 'rId1';
-            const xEmu = Math.round(item.x * 360000);
-            const yEmu = Math.round(item.y * 360000);
-            const wEmu = Math.round(item.w * 360000);
-            const hEmu = Math.round(item.h * 360000);
-            const docId = item.index + 1;
+      for (let p = 0; p < plan.totalPages; p++) {
+        if (p > 0) {
+          docXml += `\n    <w:p><w:r><w:br w:type="page"/></w:r></w:p>`;
+        }
+        docXml += `\n    <w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>`;
+        const pagePhotos = plan.placed.filter(item => item.pageIndex === p);
+        pagePhotos.forEach(item => {
+          const key = `${item.item.id}_${item.isBack ? 'back' : 'front'}`;
+          const relId = faceMap.get(key) || 'rId1';
+          const xEmu = Math.round(item.x * 360000);
+          const yEmu = Math.round(item.y * 360000);
+          const wEmu = Math.round(item.w * 360000);
+          const hEmu = Math.round(item.h * 360000);
+          const docId = item.index + 1;
 
-            docXml += `
+          docXml += `
         <w:r>
           <w:drawing>
             <wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="251658240" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1">
@@ -1060,165 +969,158 @@
             </wp:anchor>
           </w:drawing>
         </w:r>`;
-          });
-          docXml += `\n    </w:p>`;
-        }
-
-        docXml += `
-      <w:sectPr>
-        <w:pgSz w:w="11906" w:h="16838" w:orient="portrait"/>
-        <w:pgMar w:top="340" w:right="340" w:bottom="340" w:left="340" w:header="0" w:footer="0" w:gutter="0"/>
-      </w:sectPr>
-    </w:body>
-  </w:document>`;
-        zip.file('word/document.xml', docXml);
-
-        // Generate authentic OpenXML .docx blob (NOT generic zip)
-        const docxMimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-        const docxBlob = await zip.generateAsync({
-          type: 'blob',
-          mimeType: docxMimeType,
-          compression: 'DEFLATE',
-          compressionOptions: { level: 6 }
         });
+        docXml += `\n    </w:p>`;
+      }
 
-        const fileName = `PhotoGrid_A4_${Date.now()}.docx`;
-        const docxFile = new File([docxBlob], fileName, {
-          type: docxMimeType,
-          lastModified: Date.now()
-        });
+      docXml += `
+    <w:sectPr>
+      <w:pgSz w:w="11906" w:h="16838" w:orient="portrait"/>
+      <w:pgMar w:top="340" w:right="340" w:bottom="340" w:left="340" w:header="0" w:footer="0" w:gutter="0"/>
+    </w:sectPr>
+  </w:body>
+</w:document>`;
+      zip.file('word/document.xml', docXml);
 
-        // Function to trigger direct .docx download if needed
-        const triggerDocxDownload = () => {
-          const fileUrl = URL.createObjectURL(docxFile);
-          const dl = document.createElement('a');
-          dl.style.display = 'none';
-          dl.href = fileUrl;
-          dl.download = fileName;
-          dl.setAttribute('download', fileName);
-          dl.setAttribute('type', docxMimeType);
-          document.body.appendChild(dl);
-          dl.click();
-          setTimeout(() => {
-            document.body.removeChild(dl);
-            URL.revokeObjectURL(fileUrl);
-          }, 10000);
-          showToast('تم تنزيل ملف Word (.docx) في جهازك', '📥');
-        };
+      // Generate authentic OpenXML .docx blob (NOT generic zip)
+      const docxMimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      const docxBlob = await zip.generateAsync({
+        type: 'blob',
+        mimeType: docxMimeType,
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 }
+      });
 
-        // Populate share modal data
-        document.getElementById('shareModalFileName').textContent = fileName;
-        if (document.getElementById('shareGuideFileName')) {
-          document.getElementById('shareGuideFileName').textContent = fileName;
-        }
+      const fileName = `PhotoGrid_A4_${Date.now()}.docx`;
+      const docxFile = new File([docxBlob], fileName, {
+        type: docxMimeType,
+        lastModified: Date.now()
+      });
 
-        // WhatsApp Direct App Launch (Opens WhatsApp app on Android / iOS)
-        document.getElementById('btnShareWhatsApp').onclick = (e) => {
-          e.preventDefault();
-          showToast('افتح أي محادثة ثم اضغط 📎 (إرفاق) > مستند > واختر ملف ' + fileName, '💬', 5000);
-          // Try native scheme first to open WhatsApp app directly, fallback to universal wa.me
-          window.location.href = 'whatsapp://app';
-          setTimeout(() => {
-            window.location.href = 'https://wa.me/';
-          }, 600);
-        };
+      return { docxBlob, docxFile, fileName, docxMimeType };
+    }
 
-        // Telegram Direct App Launch (Opens Telegram app on iPhone / Android)
-        document.getElementById('btnShareTelegram').onclick = (e) => {
-          e.preventDefault();
-          showToast('افتح أي محادثة ثم اضغط 📎 (إرفاق) > ملف > واختر ' + fileName, '✈️', 5000);
-          // Launch Telegram native app directly via tg:// scheme (works on iOS & Android apps)
-          window.location.href = 'tg://resolve';
-          setTimeout(() => {
-            window.location.href = 'https://t.me/';
-          }, 600);
-        };
+    function downloadDocxFile(docxBlob, fileName, docxMimeType) {
+      const fileUrl = URL.createObjectURL(docxBlob);
+      const dl = document.createElement('a');
+      dl.style.display = 'none';
+      dl.href = fileUrl;
+      dl.download = fileName;
+      dl.setAttribute('download', fileName);
+      if (docxMimeType) dl.setAttribute('type', docxMimeType);
+      document.body.appendChild(dl);
+      dl.click();
+      setTimeout(() => {
+        document.body.removeChild(dl);
+        URL.revokeObjectURL(fileUrl);
+      }, 10000);
+    }
 
-        document.getElementById('btnRedownloadDocx').onclick = triggerDocxDownload;
+    // Direct Native Share: Opens Android/iOS native share sheet directly with no modal dialog
+    async function handleShareDocx() {
+      if (items.length === 0) {
+        alert('أضف عناصر أولاً');
+        return;
+      }
 
-        // Native share function (Exact Android intent experience)
-        const triggerNativeShare = async () => {
-          if (!navigator.share) {
-            showToast('المشاركة المباشرة غير مدعومة في هذا المتصفح - يمكنك إرفاق الملف من التنزيلات', 'ℹ️');
-            return false;
-          }
+      const btn = document.getElementById('btnShareDocx') || document.getElementById('btnExportDocx');
+      const originalHtml = btn ? btn.innerHTML : '';
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span>⏳</span> <span>جاري تحضير ملف Word...</span>';
+      }
 
-          // Build candidates with different MIME interpretations for maximum browser compatibility
-          const candidateFiles = [
-            docxFile,
-            new File([docxBlob], fileName, { type: 'application/msword', lastModified: Date.now() }),
-            new File([docxBlob], fileName, { type: 'application/octet-stream', lastModified: Date.now() })
-          ];
+      try {
+        const { docxBlob, docxFile, fileName, docxMimeType } = await generateDocxBlob();
 
-          let shareableFile = null;
-          if (navigator.canShare) {
-            for (const candidate of candidateFiles) {
-              try {
-                if (navigator.canShare({ files: [candidate] })) {
-                  shareableFile = candidate;
-                  break;
-                }
-              } catch (e) {
-                // Continue checking other candidates
-              }
-            }
-          } else {
-            shareableFile = docxFile;
-          }
+        let shareInvoked = false;
 
-          // 1. Try direct file share first (pass ONLY files array so apps receive the true file, not just text)
-          if (shareableFile) {
-            try {
-              await navigator.share({
-                files: [shareableFile]
-              });
-              return true;
-            } catch (err) {
-              if (err.name === 'AbortError') return true; // Dismissed by user
-              console.warn('Native file-only share error, trying with title:', err);
-              try {
-                await navigator.share({
-                  files: [shareableFile],
-                  title: fileName
-                });
-                return true;
-              } catch (e2) {
-                if (e2.name === 'AbortError') return true;
-                console.warn('Native file share retry error:', e2);
-              }
-            }
-          }
-
-          // 2. If browser cannot send .docx files via Web Share API directly
-          // Inform user clearly instead of sending plain text into WhatsApp/Telegram!
-          showToast('يرجى اختيار "إرفاق مستند" داخل تيليجرام أو واتساب لإرسال ملف DOCX الحقيقي', '📎');
-          return false;
-        };
-
-        // Wire button in modal to trigger share anytime
-        document.getElementById('btnNativeShareTrigger').onclick = async () => {
-          await triggerNativeShare();
-        };
-
-        // 1. Always download authentic uncompressed .docx file immediately
-        triggerDocxDownload();
-
-        // 2. Open native system share chooser automatically (Exact Android experience)
+        // Native System Share Sheet (Standard behavior like all mobile apps)
         if (navigator.share) {
-          triggerNativeShare();
+          let fileToShare = docxFile;
+          if (navigator.canShare) {
+            if (!navigator.canShare({ files: [docxFile] })) {
+              const octetFile = new File([docxBlob], fileName, {
+                type: 'application/octet-stream',
+                lastModified: Date.now()
+              });
+              if (navigator.canShare({ files: [octetFile] })) {
+                fileToShare = octetFile;
+              }
+            }
+          }
+
+          try {
+            // Share ONLY the file object so native apps (WhatsApp, Telegram, etc.)
+            // receive the authentic .docx document attachment with NO text replacement
+            await navigator.share({
+              files: [fileToShare]
+            });
+            shareInvoked = true;
+            showToast('تمت مشاركة ملف Word بنجاح!', '📲');
+          } catch (shareErr) {
+            if (shareErr.name === 'AbortError') {
+              // User dismissed or closed the native share drawer
+              shareInvoked = true;
+            } else {
+              console.warn('Native share error:', shareErr);
+            }
+          }
         }
 
-        // 3. Open share modal with WhatsApp, Telegram, and Bluetooth options
-        openModal('modalShareDocx');
-        showToast('تم تنزيل ملف Word (.docx) وجاهز للمشاركة!', '📄');
+        // Fallback for browsers without Web Share API file support (e.g. desktop PC)
+        if (!shareInvoked) {
+          downloadDocxFile(docxBlob, fileName, docxMimeType);
+          showToast('تم تنزيل ملف Word (.docx) في جهازك لعدم توفر المشاركة المباشرة في متصفحك', '📥', 4000);
+        }
       } catch (err) {
         console.error('Error generating DOCX:', err);
-        alert('حدث خطأ أثناء تصدير ملف Word: ' + err.message);
+        alert('حدث خطأ أثناء معالجة ملف Word: ' + err.message);
       } finally {
-        btn.disabled = false;
-        btn.innerHTML = originalHtml;
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = originalHtml;
+        }
       }
-    });
+    }
+
+    // Direct Download
+    async function handleDownloadDocx() {
+      if (items.length === 0) {
+        alert('أضف عناصر أولاً');
+        return;
+      }
+
+      const btn = document.getElementById('btnDownloadDocx');
+      const originalHtml = btn ? btn.innerHTML : '';
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span>⏳</span> <span>جاري إنشاء الملف...</span>';
+      }
+
+      try {
+        const { docxBlob, fileName, docxMimeType } = await generateDocxBlob();
+        downloadDocxFile(docxBlob, fileName, docxMimeType);
+        showToast('تم تنزيل ملف Word (.docx) بنجاح في مجلد التنزيلات', '📥', 4000);
+      } catch (err) {
+        console.error('Error downloading DOCX:', err);
+        alert('حدث خطأ أثناء تنزيل ملف Word: ' + err.message);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = originalHtml;
+        }
+      }
+    }
+
+    const btnShareDocx = document.getElementById('btnShareDocx');
+    if (btnShareDocx) btnShareDocx.addEventListener('click', handleShareDocx);
+
+    const btnExportDocx = document.getElementById('btnExportDocx');
+    if (btnExportDocx) btnExportDocx.addEventListener('click', handleShareDocx);
+
+    const btnDownloadDocx = document.getElementById('btnDownloadDocx');
+    if (btnDownloadDocx) btnDownloadDocx.addEventListener('click', handleDownloadDocx);
   </script>
 </body>
 </html>
