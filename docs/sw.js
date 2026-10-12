@@ -1,7 +1,5 @@
-const CACHE_NAME = 'photogrid-pwa-v3';
+const CACHE_NAME = 'photogrid-pwa-v4';
 const ASSETS = [
-  './',
-  './index.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png'
@@ -26,17 +24,11 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// Network-First for HTML/navigation so updates are instant, Cache-First for static assets
+// Always Network-First (no cache) for index.html / HTML navigation so updates are 100% instant
 self.addEventListener('fetch', (e) => {
   if (e.request.mode === 'navigate' || e.request.destination === 'document' || e.request.url.includes('index.html')) {
     e.respondWith(
-      fetch(e.request)
-        .then((networkRes) => {
-          const clone = networkRes.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
-          return networkRes;
-        })
-        .catch(() => caches.match(e.request))
+      fetch(e.request).catch(() => caches.match('./index.html'))
     );
     return;
   }

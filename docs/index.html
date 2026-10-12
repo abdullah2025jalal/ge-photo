@@ -70,13 +70,19 @@
         <img src="icon-192.png" alt="Icon" class="w-10 h-10 rounded-xl shadow border border-slate-600">
         <div>
           <h1 class="font-extrabold text-base sm:text-lg text-white">استوديو طباعة شبكة الصور A4</h1>
-          <p class="text-xs text-sky-400">ورق مقوى | مسافة 1 ملم | هوامش 0.6 سم | عرض متعدد الصفحات</p>
+          <p class="text-xs text-sky-400">ورق مقوى | مسافة 1 ملم | تصدير ومشاركة Word (.docx) فوري | v4.0</p>
         </div>
       </div>
-      <button id="btnOpenAddModal" class="bg-sky-600 hover:bg-sky-500 text-white font-bold px-3 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-1.5 shadow transition">
-        <span>+</span>
-        <span>إضافة عنصر</span>
-      </button>
+      <div class="flex items-center gap-2">
+        <button onclick="forceAppUpdate()" title="تحديث فوري ومسح الكاش" class="bg-slate-700/80 hover:bg-slate-600 text-sky-300 font-bold px-2.5 py-2 rounded-xl text-xs flex items-center gap-1 border border-slate-600 shadow transition">
+          <span>🔄</span>
+          <span class="hidden sm:inline">تحديث التطبيق</span>
+        </button>
+        <button id="btnOpenAddModal" class="bg-sky-600 hover:bg-sky-500 text-white font-bold px-3 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-1.5 shadow transition">
+          <span>+</span>
+          <span>إضافة عنصر</span>
+        </button>
+      </div>
     </div>
 
     <!-- Navigation Tabs -->
@@ -349,12 +355,44 @@
     let docFrontBmp = null;
     let docBackBmp = null;
 
+    // Force App Update & Cache Clear helper
+    async function forceAppUpdate() {
+      showToast('جاري تحديث التطبيق ومسح التخزين المؤقت...', '🔄');
+      if ('serviceWorker' in navigator) {
+        try {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          for (const reg of regs) {
+            await reg.unregister();
+          }
+        } catch (e) { console.warn(e); }
+      }
+      if ('caches' in window) {
+        try {
+          const keys = await caches.keys();
+          for (const key of keys) {
+            await caches.delete(key);
+          }
+        } catch (e) { console.warn(e); }
+      }
+      setTimeout(() => {
+        window.location.href = window.location.pathname + '?v=' + Date.now();
+      }, 400);
+    }
+
     // Service Worker Registration & PWA Install Prompt handling
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js?v=3').then(reg => {
+        navigator.serviceWorker.register('sw.js?v=4').then(reg => {
           reg.update();
         }).catch(err => console.log('SW reg fail', err));
+      });
+
+      let isRefreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!isRefreshing) {
+          isRefreshing = true;
+          window.location.reload();
+        }
       });
     }
 
@@ -1066,62 +1104,61 @@
             return false;
           }
 
-          let fileToShare = docxFile;
+          let canShareDirectFile = false;
           if (navigator.canShare) {
-            if (navigator.canShare({ files: [docxFile] })) {
-              fileToShare = docxFile;
-            } else {
-              // Try alternative MIME types for older Android browsers
-              const altMimes = ['application/msword', 'application/octet-stream', ''];
-              for (const m of altMimes) {
-                const alt = new File([docxBlob], fileName, { type: m, lastModified: Date.now() });
-                if (navigator.canShare({ files: [alt] })) {
-                  fileToShare = alt;
-                  break;
-                }
-              }
+            try {
+              canShareDirectFile = navigator.canShare({ files: [docxFile] });
+            } catch (e) {
+              canShareDirectFile = false;
             }
           }
 
-          try {
-            if (navigator.canShare ? navigator.canShare({ files: [fileToShare] }) : true) {
+          // 1. Try direct file share first (e.g. iOS Safari, modern mobile browsers)
+          if (canShareDirectFile) {
+            try {
               await navigator.share({
-                files: [fileToShare],
+                files: [docxFile],
                 title: 'ملف Word (.docx) - PhotoGrid Studio',
                 text: 'ملف طباعة شبكة الصور والمستندات A4 جاهز للطباعة'
               });
               return true;
+            } catch (err) {
+              if (err.name === 'AbortError') return true; // Dismissed by user
+              console.warn('Native file share error:', err);
             }
-          } catch (err) {
-            if (err.name === 'AbortError') {
-              return true; // Dismissed by user
-            }
-            console.warn('Native share call error:', err);
           }
+
+          // 2. Fallback: Launch system share chooser for WhatsApp, Telegram, Bluetooth, etc.
+          try {
+            await navigator.share({
+              title: `ملف Word: ${fileName}`,
+              text: `تم تنزيل مستند Word (.docx) الأصلي: ${fileName}\n(جاهز للمشاركة والطباعة من مجلد التنزيلات)`,
+            });
+            return true;
+          } catch (err) {
+            if (err.name === 'AbortError') return true;
+            console.warn('Native chooser share error:', err);
+          }
+
           return false;
         };
 
         // Wire button in modal to trigger share anytime
         document.getElementById('btnNativeShareTrigger').onclick = async () => {
-          const shared = await triggerNativeShare();
-          if (!shared) {
-            triggerDocxDownload();
-          }
+          await triggerNativeShare();
         };
 
-        // 1. FIRST: Directly open native system share chooser with user gesture (Identical to Android app!)
-        let didShare = false;
+        // 1. Always download authentic uncompressed .docx file immediately
+        triggerDocxDownload();
+
+        // 2. Open native system share chooser automatically (Exact Android experience)
         if (navigator.share) {
-          didShare = await triggerNativeShare();
+          triggerNativeShare();
         }
 
-        // 2. If native share is not available (e.g. desktop), download DOCX and open modal
-        if (!didShare) {
-          triggerDocxDownload();
-          openModal('modalShareDocx');
-        } else {
-          showToast('تمت مشاركة ملف Word (.docx) بنجاح!', '📄');
-        }
+        // 3. Open share modal with WhatsApp, Telegram, and Bluetooth options
+        openModal('modalShareDocx');
+        showToast('تم تنزيل ملف Word (.docx) وجاهز للمشاركة!', '📄');
       } catch (err) {
         console.error('Error generating DOCX:', err);
         alert('حدث خطأ أثناء تصدير ملف Word: ' + err.message);
