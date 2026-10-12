@@ -2,6 +2,9 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>PhotoGrid Studio - استوديو طباعة شبكة الصور A4</title>
   <meta name="description" content="استوديو طباعة شبكة الصور والمستندات على ورقة A4 لورق الصور المقوى وملفات Word">
@@ -349,7 +352,9 @@
     // Service Worker Registration & PWA Install Prompt handling
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js').catch(err => console.log('SW reg fail', err));
+        navigator.serviceWorker.register('sw.js?v=3').then(reg => {
+          reg.update();
+        }).catch(err => console.log('SW reg fail', err));
       });
     }
 
@@ -1015,7 +1020,7 @@
   </w:document>`;
         zip.file('word/document.xml', docXml);
 
-        // Generate official OpenXML .docx blob (NOT generic zip)
+        // Generate authentic OpenXML .docx blob (NOT generic zip)
         const docxMimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
         const docxBlob = await zip.generateAsync({
           type: 'blob',
@@ -1024,38 +1029,18 @@
           compressionOptions: { level: 6 }
         });
 
-        const fileName = `PhotoGrid_A4_Multi_${Date.now()}.docx`;
+        const fileName = `PhotoGrid_A4_${Date.now()}.docx`;
         const docxFile = new File([docxBlob], fileName, {
           type: docxMimeType,
           lastModified: Date.now()
         });
 
-        // 1. Direct browser download of authentic .docx file
-        const fileUrl = URL.createObjectURL(docxFile);
-        const downloadLink = document.createElement('a');
-        downloadLink.style.display = 'none';
-        downloadLink.href = fileUrl;
-        downloadLink.download = fileName;
-        downloadLink.setAttribute('download', fileName);
-        downloadLink.setAttribute('type', docxMimeType);
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-        setTimeout(() => {
-          document.body.removeChild(downloadLink);
-          URL.revokeObjectURL(fileUrl);
-        }, 10000);
-
-        // 2. Setup interactive Share Modal data
-        document.getElementById('shareModalFileName').textContent = fileName;
-        const shareText = encodeURIComponent(`ملف Word (.docx) لطباعة شبكة الصور والمستندات A4: ${fileName}`);
-        document.getElementById('btnShareWhatsApp').href = `https://api.whatsapp.com/send?text=${shareText}`;
-        document.getElementById('btnShareTelegram').href = `https://t.me/share/url?text=${shareText}`;
-
-        document.getElementById('btnRedownloadDocx').onclick = () => {
-          const reUrl = URL.createObjectURL(docxFile);
+        // Function to trigger direct .docx download if needed
+        const triggerDocxDownload = () => {
+          const fileUrl = URL.createObjectURL(docxFile);
           const dl = document.createElement('a');
           dl.style.display = 'none';
-          dl.href = reUrl;
+          dl.href = fileUrl;
           dl.download = fileName;
           dl.setAttribute('download', fileName);
           dl.setAttribute('type', docxMimeType);
@@ -1063,80 +1048,79 @@
           dl.click();
           setTimeout(() => {
             document.body.removeChild(dl);
-            URL.revokeObjectURL(reUrl);
-          }, 8000);
-          showToast('جاري إعادة تنزيل ملف Word (.docx)...', '📥');
+            URL.revokeObjectURL(fileUrl);
+          }, 10000);
+          showToast('تم تنزيل ملف Word (.docx) في جهازك', '📥');
         };
 
-        // Shared function for triggering native Android / System share sheet
-        const executeShareAction = async () => {
+        // Populate share modal data
+        document.getElementById('shareModalFileName').textContent = fileName;
+        const shareText = encodeURIComponent(`ملف Word (.docx) لطباعة شبكة الصور والمستندات A4: ${fileName}`);
+        document.getElementById('btnShareWhatsApp').href = `https://api.whatsapp.com/send?text=${shareText}`;
+        document.getElementById('btnShareTelegram').href = `https://t.me/share/url?text=${shareText}`;
+        document.getElementById('btnRedownloadDocx').onclick = triggerDocxDownload;
+
+        // Native share function (Exact Android intent experience)
+        const triggerNativeShare = async () => {
           if (!navigator.share) {
-            showToast('المشاركة المباشرة غير مدعومة في متصفحك. استخدم أزرار واتساب أو تيليجرام أدناه.', 'ℹ️');
-            return;
+            return false;
           }
 
-          let shared = false;
+          let fileToShare = docxFile;
+          if (navigator.canShare) {
+            if (navigator.canShare({ files: [docxFile] })) {
+              fileToShare = docxFile;
+            } else {
+              // Try alternative MIME types for older Android browsers
+              const altMimes = ['application/msword', 'application/octet-stream', ''];
+              for (const m of altMimes) {
+                const alt = new File([docxBlob], fileName, { type: m, lastModified: Date.now() });
+                if (navigator.canShare({ files: [alt] })) {
+                  fileToShare = alt;
+                  break;
+                }
+              }
+            }
+          }
 
-          // Attempt 1: Share File directly with OpenXML docx MIME type
           try {
-            if (navigator.canShare && navigator.canShare({ files: [docxFile] })) {
+            if (navigator.canShare ? navigator.canShare({ files: [fileToShare] }) : true) {
               await navigator.share({
-                files: [docxFile],
+                files: [fileToShare],
                 title: 'ملف Word (.docx) - PhotoGrid Studio',
-                text: 'ملف طباعة شبكة الصور والمستندات A4'
+                text: 'ملف طباعة شبكة الصور والمستندات A4 جاهز للطباعة'
               });
-              shared = true;
+              return true;
             }
-          } catch (e) {
-            if (e.name === 'AbortError') return;
-            console.log('Native share attempt 1 error:', e);
-          }
-
-          // Attempt 2: Fallback with application/msword if browser requires alternative doc type
-          if (!shared) {
-            try {
-              const altDocFile = new File([docxBlob], fileName, { type: 'application/msword' });
-              if (navigator.canShare && navigator.canShare({ files: [altDocFile] })) {
-                await navigator.share({
-                  files: [altDocFile],
-                  title: 'ملف Word (.docx) - PhotoGrid Studio',
-                  text: 'ملف طباعة شبكة الصور والمستندات A4'
-                });
-                shared = true;
-              }
-            } catch (e) {
-              if (e.name === 'AbortError') return;
-              console.log('Native share attempt 2 error:', e);
+          } catch (err) {
+            if (err.name === 'AbortError') {
+              return true; // Dismissed by user
             }
+            console.warn('Native share call error:', err);
           }
-
-          // Attempt 3: General system share fallback
-          if (!shared) {
-            try {
-              await navigator.share({
-                title: 'ملف Word (.docx) - PhotoGrid Studio',
-                text: `تم تنزيل ملف Word (.docx) جاهز للطباعة: ${fileName}`
-              });
-            } catch (e) {
-              if (e.name !== 'AbortError') {
-                console.log('Native share general error:', e);
-              }
-            }
-          }
+          return false;
         };
 
         // Wire button in modal to trigger share anytime
-        document.getElementById('btnNativeShareTrigger').onclick = executeShareAction;
+        document.getElementById('btnNativeShareTrigger').onclick = async () => {
+          const shared = await triggerNativeShare();
+          if (!shared) {
+            triggerDocxDownload();
+          }
+        };
 
-        // Open share modal immediately so user sees full status & options
-        openModal('modalShareDocx');
-        showToast('تم تحميل ملف Word (.docx) بنجاح وجاري فتح خيارات المشاركة...', '📄');
+        // 1. FIRST: Directly open native system share chooser with user gesture (Identical to Android app!)
+        let didShare = false;
+        if (navigator.share) {
+          didShare = await triggerNativeShare();
+        }
 
-        // Automatically prompt native system share sheet (Telegram, WhatsApp, Bluetooth, etc.)
-        try {
-          await executeShareAction();
-        } catch (autoErr) {
-          console.log('Auto share execution error:', autoErr);
+        // 2. If native share is not available (e.g. desktop), download DOCX and open modal
+        if (!didShare) {
+          triggerDocxDownload();
+          openModal('modalShareDocx');
+        } else {
+          showToast('تمت مشاركة ملف Word (.docx) بنجاح!', '📄');
         }
       } catch (err) {
         console.error('Error generating DOCX:', err);
