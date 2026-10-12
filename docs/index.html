@@ -70,7 +70,7 @@
         <img src="icon-192.png" alt="Icon" class="w-10 h-10 rounded-xl shadow border border-slate-600">
         <div>
           <h1 class="font-extrabold text-base sm:text-lg text-white">استوديو طباعة شبكة الصور A4</h1>
-          <p class="text-xs text-sky-400">ورق مقوى | مسافة 1 ملم | تصدير ومشاركة Word (.docx) أصلي | v5.0</p>
+          <p class="text-xs text-sky-400">ورق مقوى | مسافة 1 ملم | تصدير ومشاركة Word (.docx) أصلي | v5.1</p>
         </div>
       </div>
       <div class="flex items-center gap-2">
@@ -339,13 +339,13 @@
       <!-- Quick Action Buttons for Apps -->
       <div class="grid grid-cols-2 gap-2 mb-4">
         <!-- WhatsApp -->
-        <a id="btnShareWhatsApp" href="#" target="_blank" class="bg-[#25D366]/20 hover:bg-[#25D366]/30 text-[#25D366] border border-[#25D366]/40 font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-2 transition">
-          <span class="text-base">💬</span> <span>فتح واتساب</span>
-        </a>
+        <button id="btnShareWhatsApp" type="button" class="bg-[#25D366]/20 hover:bg-[#25D366]/30 text-[#25D366] border border-[#25D366]/40 font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-2 transition cursor-pointer">
+          <span class="text-base">💬</span> <span>فتح تطبيق واتساب</span>
+        </button>
         <!-- Telegram -->
-        <a id="btnShareTelegram" href="#" target="_blank" class="bg-[#229ED9]/20 hover:bg-[#229ED9]/30 text-[#229ED9] border border-[#229ED9]/40 font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-2 transition">
-          <span class="text-base">✈️</span> <span>فتح تيليجرام</span>
-        </a>
+        <button id="btnShareTelegram" type="button" class="bg-[#229ED9]/20 hover:bg-[#229ED9]/30 text-[#229ED9] border border-[#229ED9]/40 font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-2 transition cursor-pointer">
+          <span class="text-base">✈️</span> <span>فتح تطبيق تيليجرام</span>
+        </button>
       </div>
 
       <div class="flex justify-between items-center pt-2 border-t border-slate-700/60">
@@ -397,7 +397,7 @@
     // Service Worker Registration & PWA Install Prompt handling
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js?v=5').then(reg => {
+        navigator.serviceWorker.register('sw.js?v=6').then(reg => {
           reg.update();
         }).catch(err => console.log('SW reg fail', err));
       });
@@ -1111,9 +1111,29 @@
         if (document.getElementById('shareGuideFileName')) {
           document.getElementById('shareGuideFileName').textContent = fileName;
         }
-        const shareText = encodeURIComponent(`ملف Word (.docx) لطباعة شبكة الصور والمستندات A4: ${fileName}`);
-        document.getElementById('btnShareWhatsApp').href = `https://api.whatsapp.com/send?text=${shareText}`;
-        document.getElementById('btnShareTelegram').href = `https://t.me/share/url?text=${shareText}`;
+
+        // WhatsApp Direct App Launch (Opens WhatsApp app on Android / iOS)
+        document.getElementById('btnShareWhatsApp').onclick = (e) => {
+          e.preventDefault();
+          showToast('افتح أي محادثة ثم اضغط 📎 (إرفاق) > مستند > واختر ملف ' + fileName, '💬', 5000);
+          // Try native scheme first to open WhatsApp app directly, fallback to universal wa.me
+          window.location.href = 'whatsapp://app';
+          setTimeout(() => {
+            window.location.href = 'https://wa.me/';
+          }, 600);
+        };
+
+        // Telegram Direct App Launch (Opens Telegram app on iPhone / Android)
+        document.getElementById('btnShareTelegram').onclick = (e) => {
+          e.preventDefault();
+          showToast('افتح أي محادثة ثم اضغط 📎 (إرفاق) > ملف > واختر ' + fileName, '✈️', 5000);
+          // Launch Telegram native app directly via tg:// scheme (works on iOS & Android apps)
+          window.location.href = 'tg://resolve';
+          setTimeout(() => {
+            window.location.href = 'https://t.me/';
+          }, 600);
+        };
+
         document.getElementById('btnRedownloadDocx').onclick = triggerDocxDownload;
 
         // Native share function (Exact Android intent experience)
