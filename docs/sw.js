@@ -1,4 +1,4 @@
-const CACHE_NAME = 'photogrid-pwa-v7';
+const CACHE_NAME = 'photomagic-pwa-v8';
 const ASSETS = [
   './manifest.json',
   './icon-192.png',

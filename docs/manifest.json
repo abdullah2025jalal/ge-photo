@@ -1,6 +1,6 @@
 {
-  "name": "PhotoGrid Studio - استوديو طباعة شبكة الصور A4",
-  "short_name": "PhotoGrid",
+  "name": "PhotoMagic - استوديو طباعة شبكة الصور A4",
+  "short_name": "PhotoMagic",
   "description": "استوديو طباعة شبكة الصور والمستندات على ورقة A4 لورق الصور المقوى وملفات Word",
   "start_url": "./",
   "display": "standalone",

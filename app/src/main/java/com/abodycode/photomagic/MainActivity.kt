@@ -1,4 +1,4 @@
-package com.example
+package com.abodycode.photomagic
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -11,8 +11,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
-import com.example.ui.MainStudioScreen
-import com.example.ui.theme.MyApplicationTheme
+import com.abodycode.photomagic.ui.MainStudioScreen
+import com.abodycode.photomagic.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

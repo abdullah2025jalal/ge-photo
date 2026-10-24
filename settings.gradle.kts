@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "PhotoGrid Studio"
+rootProject.name = "PhotoMagic"
 
 include(":app")

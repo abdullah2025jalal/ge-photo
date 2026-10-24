@@ -1,4 +1,4 @@
-package com.example.ui
+package com.abodycode.photomagic.ui
 
 import android.content.ContentValues
 import android.content.Context
@@ -101,12 +101,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
-import com.example.model.A4GridPlan
-import com.example.model.DocumentDuplexMode
-import com.example.model.ItemType
-import com.example.model.PrintPhotoItem
-import com.example.util.BitmapProcessor
-import com.example.util.DocxExportHelper
+import com.abodycode.photomagic.model.A4GridPlan
+import com.abodycode.photomagic.model.DocumentDuplexMode
+import com.abodycode.photomagic.model.ItemType
+import com.abodycode.photomagic.model.PrintPhotoItem
+import com.abodycode.photomagic.util.BitmapProcessor
+import com.abodycode.photomagic.util.DocxExportHelper
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
@@ -1469,7 +1469,7 @@ private suspend fun exportAndShareDocx(
     plan: A4GridPlan
 ) {
     try {
-        val fileName = "PhotoGrid_A4_Multi_${System.currentTimeMillis()}.docx"
+        val fileName = "PhotoMagic_A4_Multi_${System.currentTimeMillis()}.docx"
         val docxFile = DocxExportHelper.generateMultiPhotoDocx(
             context = context,
             plan = plan,
@@ -1510,7 +1510,7 @@ private suspend fun saveA4HighResImage(
             dpi = 300
         )
 
-        val fileName = "PhotoGrid_A4_p${pageIndex + 1}_${System.currentTimeMillis()}.png"
+        val fileName = "PhotoMagic_A4_p${pageIndex + 1}_${System.currentTimeMillis()}.png"
         saveBitmapToGallery(context, a4HiRes, fileName)
         Toast.makeText(context, "تم حفظ الورقة ${pageIndex + 1} بنجاح في مجلد الصور!", Toast.LENGTH_SHORT).show()
     } catch (e: Exception) {
@@ -1525,7 +1525,7 @@ private fun saveBitmapToGallery(context: Context, bitmap: Bitmap, fileName: Stri
         val contentValues = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
             put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
-            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/PhotoGrid")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/PhotoMagic")
         }
         val uri: Uri? = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
         if (uri != null) {
@@ -1534,7 +1534,7 @@ private fun saveBitmapToGallery(context: Context, bitmap: Bitmap, fileName: Stri
             }
         }
     } else {
-        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "PhotoGrid").apply { mkdirs() }
+        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "PhotoMagic").apply { mkdirs() }
         val file = File(dir, fileName)
         FileOutputStream(file).use { stream ->
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)

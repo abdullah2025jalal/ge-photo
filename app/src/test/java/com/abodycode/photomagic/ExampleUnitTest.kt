@@ -1,10 +1,10 @@
-package com.example
+package com.abodycode.photomagic
 
-import com.example.model.A4GridPlan
-import com.example.model.DocumentDuplexMode
-import com.example.model.ItemType
-import com.example.model.PhotoDimension
-import com.example.model.PrintPhotoItem
+import com.abodycode.photomagic.model.A4GridPlan
+import com.abodycode.photomagic.model.DocumentDuplexMode
+import com.abodycode.photomagic.model.ItemType
+import com.abodycode.photomagic.model.PhotoDimension
+import com.abodycode.photomagic.model.PrintPhotoItem
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

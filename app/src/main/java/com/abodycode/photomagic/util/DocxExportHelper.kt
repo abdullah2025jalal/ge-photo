@@ -1,9 +1,9 @@
-package com.example.util
+package com.abodycode.photomagic.util
 
 import android.content.Context
 import android.graphics.Bitmap
-import com.example.model.A4GridPlan
-import com.example.model.PrintPhotoItem
+import com.abodycode.photomagic.model.A4GridPlan
+import com.abodycode.photomagic.model.PrintPhotoItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -24,7 +24,7 @@ object DocxExportHelper {
     suspend fun generateMultiPhotoDocx(
         context: Context,
         plan: A4GridPlan,
-        fileName: String = "PhotoGrid_A4_Multi.docx"
+        fileName: String = "PhotoMagic_A4_Multi.docx"
     ): File = withContext(Dispatchers.IO) {
         val outputDir = File(context.cacheDir, "exports").apply { mkdirs() }
         val outputFile = File(outputDir, fileName)

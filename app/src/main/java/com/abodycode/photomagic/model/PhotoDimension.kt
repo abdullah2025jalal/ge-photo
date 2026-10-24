@@ -1,4 +1,4 @@
-package com.example.model
+package com.abodycode.photomagic.model
 
 data class PhotoDimension(
     val name: String,

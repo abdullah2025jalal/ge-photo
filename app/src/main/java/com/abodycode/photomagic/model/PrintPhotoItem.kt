@@ -1,4 +1,4 @@
-package com.example.model
+package com.abodycode.photomagic.model
 
 import android.graphics.Bitmap
 import android.net.Uri

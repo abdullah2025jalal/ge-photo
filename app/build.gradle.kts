@@ -9,11 +9,11 @@ plugins {
 }
 
 android {
-  namespace = "com.example"
+  namespace = "com.abodycode.photomagic"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.aistudio.photogrid.wvkfqa"
+    applicationId = "com.abodycode.photomagic"
     minSdk = 24
     targetSdk = 36
     versionCode = 1

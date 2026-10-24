@@ -1,4 +1,4 @@
-package com.example.model
+package com.abodycode.photomagic.model
 
 import kotlin.math.max
 

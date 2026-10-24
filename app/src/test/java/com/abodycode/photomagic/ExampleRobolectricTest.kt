@@ -1,4 +1,4 @@
-package com.example
+package com.abodycode.photomagic
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
@@ -16,6 +16,6 @@ class ExampleRobolectricTest {
   fun `read string from context`() {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val appName = context.getString(R.string.app_name)
-    assertEquals("PhotoGrid Studio", appName)
+    assertEquals("PhotoMagic", appName)
   }
 }
