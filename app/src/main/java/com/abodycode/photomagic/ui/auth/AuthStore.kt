@@ -47,7 +47,7 @@ internal object AuthStore {
         editor.putInt(KEY_ATTEMPTS, attempts)
         if (attempts >= AUTH_MAX_ATTEMPTS) {
             // 30 s, then 60 s, 120 s... reset only by a successful login.
-            val seconds = 30 shl (attempts - authMaxAttempts)
+            val seconds = 30 shl (attempts - AUTH_MAX_ATTEMPTS)
             editor.putLong(KEY_LOCK_UNTIL, System.currentTimeMillis() + seconds * 1000L)
         }
         editor.apply()
