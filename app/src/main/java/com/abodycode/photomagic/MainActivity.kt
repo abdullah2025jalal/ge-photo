@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -88,6 +90,38 @@ private fun PhotoMagicApp() {
 
     var monitorJob by remember { mutableStateOf<Job?>(null) }
 
+    fun stopMonitorJob() {
+        monitorJob?.cancel()
+        monitorJob = null
+    }
+
+    fun signOut() {
+        stopMonitorJob()
+        AuthStore.clearSession(context)
+        session = null
+        error = AuthError.NONE
+        screen = GateScreen.LOGIN
+    }
+
+    fun startMonitor(name: String) {
+        stopMonitorJob()
+        monitorJob = scope.launch {
+            // Live account monitor (p2p dish _startMonitor): every 30 s the
+            // saved session is re-checked; deletion / suspension / expiry
+            // ends the session immediately. Offline ticks keep the session.
+            while (isActive) {
+                delay(30_000)
+                when (AuthApi.checkAlive(name)) {
+                    false -> {
+                        signOut()
+                        break
+                    }
+                    else -> Unit // alive or offline — keep the session
+                }
+            }
+        }
+    }
+
     fun signIn(rawUsername: String, rawPassword: String) {
         if (busy) return
         scope.launch {
@@ -135,38 +169,6 @@ private fun PhotoMagicApp() {
                 AuthOutcome.SERVER_ERROR -> {
                     error = AuthError.SERVER
                     busy = false
-                }
-            }
-        }
-    }
-
-    fun stopMonitorJob() {
-        monitorJob?.cancel()
-        monitorJob = null
-    }
-
-    fun signOut() {
-        stopMonitorJob()
-        AuthStore.clearSession(context)
-        session = null
-        error = AuthError.NONE
-        screen = GateScreen.LOGIN
-    }
-
-    fun startMonitor(name: String) {
-        stopMonitorJob()
-        monitorJob = scope.launch {
-            // Live account monitor (p2p dish _startMonitor): every 30 s the
-            // saved session is re-checked; deletion / suspension / expiry
-            // ends the session immediately. Offline ticks keep the session.
-            while (isActive) {
-                delay(30_000)
-                when (AuthApi.checkAlive(name)) {
-                    false -> {
-                        signOut()
-                        break
-                    }
-                    else -> Unit // alive or offline — keep the session
                 }
             }
         }

@@ -3,6 +3,7 @@ package com.abodycode.photomagic.ui.auth
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,7 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.outlined.Email
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
@@ -65,7 +65,9 @@ internal fun ChannelButton(
     val brandRes: Int = when (url) {
         ContactUrls.WHATSAPP -> R.drawable.ic_whatsapp
         ContactUrls.TELEGRAM, ContactUrls.CHANNEL -> R.drawable.ic_telegram
-        ContactUrls.EMAIL -> 0 // standard envelope icon (works for any mail client)
+        // Universal e-mail icon (the standard envelope everyone knows)
+        // instead of the Gmail logo — works for any mail client.
+        ContactUrls.EMAIL -> R.drawable.ic_email
         else -> 0
     }
 
@@ -85,21 +87,12 @@ internal fun ChannelButton(
     }
 
     Row(modifier = styled, verticalAlignment = Alignment.CenterVertically) {
-        if (brandRes != 0) {
-            Icon(
-                painter = painterResource(brandRes),
-                contentDescription = null,
-                tint = color,
-                modifier = Modifier.size(26.dp),
-            )
-        } else {
-            Icon(
-                imageVector = Icons.AutoMirrored.Outlined.Email,
-                contentDescription = null,
-                tint = color,
-                modifier = Modifier.size(26.dp),
-            )
-        }
+        Icon(
+            painter = painterResource(brandRes),
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(26.dp),
+        )
         Spacer(modifier = Modifier.width(14.dp))
         Text(
             text = label,

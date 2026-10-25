@@ -45,7 +45,7 @@ internal object AuthStore {
         val attempts = failedAttempts(context) + 1
         val editor = prefs(context).edit()
         editor.putInt(KEY_ATTEMPTS, attempts)
-        if (attempts >= authMaxAttempts) {
+        if (attempts >= AUTH_MAX_ATTEMPTS) {
             // 30 s, then 60 s, 120 s... reset only by a successful login.
             val seconds = 30 shl (attempts - authMaxAttempts)
             editor.putLong(KEY_LOCK_UNTIL, System.currentTimeMillis() + seconds * 1000L)
@@ -77,8 +77,6 @@ internal object AuthStore {
         prefs(context).edit().putString(KEY_THEME, value).apply()
     }
 
-    companion object {
-        /// Same maximum as p2p dish: 5 failed attempts before backoff.
-        const val authMaxAttempts: Int = 5
-    }
+    /// Same maximum as p2p dish: 5 failed attempts before backoff.
+    const val AUTH_MAX_ATTEMPTS: Int = 5
 }
