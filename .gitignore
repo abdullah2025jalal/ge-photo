@@ -21,3 +21,9 @@ firebase-debug.log
 *service-account*.json
 credentials.json
 .firebase/
+
+# Local Node experiments (GitHub Actions injects deps itself)
+node_modules/
+
+# Firebase config is injected at build time via GOOGLE_SERVICES_JSON_B64
+app/google-services.json
