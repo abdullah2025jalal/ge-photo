@@ -13,14 +13,12 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -29,10 +27,8 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -86,6 +82,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -93,29 +90,109 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import com.abodycode.photomagic.R
 import com.abodycode.photomagic.model.A4GridPlan
 import com.abodycode.photomagic.model.DocumentDuplexMode
 import com.abodycode.photomagic.model.ItemType
 import com.abodycode.photomagic.model.PrintPhotoItem
+import com.abodycode.photomagic.ui.auth.StudioStrings
+import com.abodycode.photomagic.ui.auth.studioStringsFor
 import com.abodycode.photomagic.util.BitmapProcessor
 import com.abodycode.photomagic.util.DocxExportHelper
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 
+/** Visual scheme for the studio surface — dark keeps the original
+ *  slate-blue design, light mirrors it on white/blue-gray so the WHOLE
+ *  screen (cards, tabs, dialogs, inputs, badges) follows the chosen mode. */
+data class StudioPalette(
+    val background: Color,
+    val surface: Color,
+    val frame: Color,
+    val text: Color,
+    val textHigh: Color,
+    val textDim: Color,
+    val textFaint: Color,
+    val accent: Color,
+    val action: Color,
+    val blue: Color,
+    val dangerBg: Color,
+    val danger: Color,
+    val photoBadge: Color,
+    val docBadge: Color,
+    val canvas: Color,
+    val inputBg: Color,
+    val inputBorder: Color,
+    val chipBg: Color,
+    val chipText: Color,
+)
+
+fun studioPalette(dark: Boolean): StudioPalette = if (dark) {
+    StudioPalette(
+        background = Color(0xFF0F172A),
+        surface = Color(0xFF1E293B),
+        frame = Color(0xFF334155),
+        text = Color.White,
+        textHigh = Color(0xFFE2E8F0),
+        textDim = Color(0xFF94A3B8),
+        textFaint = Color(0xFF64748B),
+        accent = Color(0xFF38BDF8),
+        action = Color(0xFF0284C7),
+        blue = Color(0xFF2563EB),
+        dangerBg = Color(0xFF7F1D1D).copy(alpha = 0.6f),
+        danger = Color(0xFFF87171),
+        photoBadge = Color(0xFF0F766E),
+        docBadge = Color(0xFF1E3A8A),
+        canvas = Color.Black,
+        inputBg = Color(0xFF0F172A),
+        inputBorder = Color(0xFF475569),
+        chipBg = Color(0xFF0F172A),
+        chipText = Color(0xFFCBD5E1),
+    )
+} else {
+    StudioPalette(
+        background = Color(0xFFF8FAFC),
+        surface = Color.White,
+        frame = Color(0xFFCBD5E1),
+        text = Color(0xFF0F172A),
+        textHigh = Color(0xFF1E293B),
+        textDim = Color(0xFF475569),
+        textFaint = Color(0xFF94A3B8),
+        accent = Color(0xFF0284C7),
+        action = Color(0xFF0284C7),
+        blue = Color(0xFF2563EB),
+        dangerBg = Color(0xFFFEE2E2),
+        danger = Color(0xFFDC2626),
+        photoBadge = Color(0xFF0F766E),
+        docBadge = Color(0xFF1E3A8A),
+        canvas = Color.Black,
+        inputBg = Color.White,
+        inputBorder = Color(0xFF94A3B8),
+        chipBg = Color.White,
+        chipText = Color(0xFF475569),
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainStudioScreen() {
+fun MainStudioScreen(locale: String, dark: Boolean) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val t: StudioStrings = studioStringsFor(locale)
+    val p: StudioPalette = studioPalette(dark)
 
     // Queue of photos / documents
     val printItems = remember { mutableStateListOf<PrintPhotoItem>() }
@@ -128,11 +205,28 @@ fun MainStudioScreen() {
     var showAddDocumentDialog by remember { mutableStateOf(false) }
     var itemToEditDimensions by remember { mutableStateOf<PrintPhotoItem?>(null) }
 
+    // Whether the back button has a step to return to (dialog open, or the
+    // preview tab is active). Mirrors the system BackHandler conditions.
+    val canBackStep = activeTabIndex != 0 || showAddTypeDialog ||
+        showAddDocumentDialog || itemToEditDimensions != null
+
     // Handle system Back gesture / hardware back button:
     // Returns to previous step (closes dialogs or switches from Tab 1 to Tab 0)
     BackHandler(
-        enabled = activeTabIndex != 0 || showAddTypeDialog || showAddDocumentDialog || itemToEditDimensions != null
+        enabled = canBackStep
     ) {
+        if (itemToEditDimensions != null) {
+            itemToEditDimensions = null
+        } else if (showAddDocumentDialog) {
+            showAddDocumentDialog = false
+        } else if (showAddTypeDialog) {
+            showAddTypeDialog = false
+        } else if (activeTabIndex != 0) {
+            activeTabIndex = 0
+        }
+    }
+
+    fun backOneStep() {
         if (itemToEditDimensions != null) {
             itemToEditDimensions = null
         } else if (showAddDocumentDialog) {
@@ -155,7 +249,7 @@ fun MainStudioScreen() {
                     val count = printItems.count { it.itemType == ItemType.PHOTO } + 1
                     printItems.add(
                         PrintPhotoItem(
-                            name = "صورة $count",
+                            name = t.photoName(count),
                             itemType = ItemType.PHOTO,
                             sourceBitmap = bitmap,
                             uri = uri,
@@ -211,93 +305,109 @@ fun MainStudioScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0F172A))
-            .statusBarsPadding()
-            .navigationBarsPadding()
+            .background(p.background)
     ) {
-        // App Bar
-        Surface(
-            color = Color(0xFF1E293B),
-            shadowElevation = 4.dp
-        ) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "استوديو طباعة شبكة الصور A4",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 17.sp
-                        )
-                        Text(
-                            text = "ورق مقوى | هوامش 0.6 سم | مسافة 1 ملم | عرض متعدد الصفحات كملف Word",
-                            color = Color(0xFF38BDF8),
-                            fontSize = 11.sp
-                        )
-                    }
-
-                    // Add button opens selector (Photo vs Document)
-                    Button(
-                        onClick = { showAddTypeDialog = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
-                        shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                        modifier = Modifier.testTag("add_item_btn")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("إضافة عنصر", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Navigation Tabs
-                TabRow(
-                    selectedTabIndex = activeTabIndex,
-                    containerColor = Color(0xFF0F172A),
-                    contentColor = Color.White,
+        // ABODY CODE hero: big CENTERED logo, with the working back button
+        // beside it (fixed left edge, like the app badge / home in the top
+        // bar) and the centered "add photo" button right below the logo.
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 2.dp),
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.abody_code_logo),
+                    contentDescription = "ABODY CODE",
+                    contentScale = ContentScale.Fit,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .height(38.dp)
+                        .fillMaxWidth()
+                        .height(120.dp),
+                )
+                IconButton(
+                    onClick = { backOneStep() },
+                    enabled = canBackStep,
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .size(40.dp)
+                        .testTag("back_step_btn"),
                 ) {
-                    Tab(
-                        selected = activeTabIndex == 0,
-                        onClick = { activeTabIndex = 0 },
-                        text = {
-                            Text(
-                                text = "العناصر (${printItems.size})",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    )
-                    Tab(
-                        selected = activeTabIndex == 1,
-                        onClick = { activeTabIndex = 1 },
-                        text = {
-                            Text(
-                                text = "معاينة الملف والطباعة (${gridPlan.totalPagesCount} ورقة)",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = t.back,
+                        tint = if (canBackStep) p.accent else p.textFaint,
+                        modifier = Modifier.size(22.dp),
                     )
                 }
             }
         }
 
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Centered "add photo" button right below the big logo
+        Button(
+            onClick = { showAddTypeDialog = true },
+            colors = ButtonDefaults.buttonColors(containerColor = p.action),
+            shape = RoundedCornerShape(12.dp),
+            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 10.dp),
+            modifier = Modifier
+                .align(Alignment.CenterHorizontally)
+                .testTag("add_item_btn")
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = t.addPhotoBtn,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Navigation Tabs
+        TabRow(
+            selectedTabIndex = activeTabIndex,
+            containerColor = p.background,
+            contentColor = p.text,
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .height(38.dp)
+        ) {
+            Tab(
+                selected = activeTabIndex == 0,
+                onClick = { activeTabIndex = 0 },
+                text = {
+                    Text(
+                        text = t.tabItems(printItems.size),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            )
+            Tab(
+                selected = activeTabIndex == 1,
+                onClick = { activeTabIndex = 1 },
+                text = {
+                    Text(
+                        text = t.tabPreview(gridPlan.totalPagesCount),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            )
+        }
+
         // Tab Content
         if (activeTabIndex == 0) {
             PhotosListTab(
+                strings = t,
+                palette = p,
                 items = printItems,
                 onAddNew = { showAddTypeDialog = true },
                 onUpdateItem = { updatedItem ->
@@ -318,6 +428,8 @@ fun MainStudioScreen() {
             )
         } else {
             A4WordMultiPageTab(
+                strings = t,
+                palette = p,
                 gridPlan = gridPlan,
                 pageBitmaps = pageBitmaps,
                 isRendering = isRenderingPreview,
@@ -326,20 +438,20 @@ fun MainStudioScreen() {
                     if (!isExportingDocx) {
                         isExportingDocx = true
                         scope.launch {
-                            exportAndShareDocx(context, gridPlan)
+                            exportAndShareDocx(context, gridPlan, t)
                             isExportingDocx = false
                         }
                     }
                 },
                 onSavePageHiRes = { pageIdx ->
                     scope.launch {
-                        saveA4HighResImage(context, gridPlan, pageIdx)
+                        saveA4HighResImage(context, gridPlan, pageIdx, t)
                     }
                 },
                 onSaveAllPagesHiRes = {
                     scope.launch {
-                        for (p in 0 until gridPlan.totalPagesCount) {
-                            saveA4HighResImage(context, gridPlan, p)
+                        for (pg in 0 until gridPlan.totalPagesCount) {
+                            saveA4HighResImage(context, gridPlan, pg, t)
                         }
                     }
                 }
@@ -350,6 +462,8 @@ fun MainStudioScreen() {
     // Selection dialog: Add Standard Photo vs Add Document
     if (showAddTypeDialog) {
         AddTypeChoiceDialog(
+            strings = t,
+            palette = p,
             onDismiss = { showAddTypeDialog = false },
             onSelectPhoto = {
                 showAddTypeDialog = false
@@ -367,6 +481,8 @@ fun MainStudioScreen() {
     // Add Document Dialog (Front & optional Back side with duplex option)
     if (showAddDocumentDialog) {
         AddDocumentDialog(
+            strings = t,
+            palette = p,
             onDismiss = { showAddDocumentDialog = false },
             onConfirm = { docItem ->
                 printItems.add(docItem)
@@ -378,6 +494,8 @@ fun MainStudioScreen() {
     // Edit Item Dimensions Dialog
     itemToEditDimensions?.let { item ->
         EditPhotoDimensionDialog(
+            strings = t,
+            palette = p,
             item = item,
             onDismiss = { itemToEditDimensions = null },
             onConfirm = { updatedItem ->
@@ -393,6 +511,8 @@ fun MainStudioScreen() {
 
 @Composable
 fun PhotosListTab(
+    strings: StudioStrings,
+    palette: StudioPalette,
     items: List<PrintPhotoItem>,
     onAddNew: () -> Unit,
     onUpdateItem: (PrintPhotoItem) -> Unit,
@@ -400,6 +520,8 @@ fun PhotosListTab(
     onEditDimensions: (PrintPhotoItem) -> Unit,
     onGoToPreview: () -> Unit
 ) {
+    val t = strings
+    val p = palette
     if (items.isEmpty()) {
         Box(
             modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -407,7 +529,7 @@ fun PhotosListTab(
         ) {
             Card(
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+                colors = CardDefaults.cardColors(containerColor = p.surface),
                 modifier = Modifier.fillMaxWidth().padding(16.dp)
             ) {
                 Column(
@@ -417,20 +539,20 @@ fun PhotosListTab(
                     Icon(
                         imageVector = Icons.Default.PhotoLibrary,
                         contentDescription = null,
-                        tint = Color(0xFF38BDF8),
+                        tint = p.accent,
                         modifier = Modifier.size(56.dp)
                     )
                     Spacer(modifier = Modifier.height(14.dp))
                     Text(
-                        text = "لا توجد عناصر مضافة بعد",
-                        color = Color.White,
+                        text = t.emptyTitle,
+                        color = p.text,
                         fontWeight = FontWeight.Bold,
                         fontSize = 17.sp
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "يمكنك إضافة صور شخصية عادية أو مستندات (هوية، رخصة، بطاقة مع وجه أمامي وخلفي) لطباعتها بأعلى دقة على ورقة A4 دون أي تداخل.",
-                        color = Color(0xFF94A3B8),
+                        text = t.emptyBody,
+                        color = p.textDim,
                         textAlign = TextAlign.Center,
                         fontSize = 12.sp,
                         lineHeight = 18.sp
@@ -438,12 +560,12 @@ fun PhotosListTab(
                     Spacer(modifier = Modifier.height(20.dp))
                     Button(
                         onClick = onAddNew,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                        colors = ButtonDefaults.buttonColors(containerColor = p.action),
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("إضافة صورة أو مستند")
+                        Text(t.emptyAdd)
                     }
                 }
             }
@@ -456,6 +578,8 @@ fun PhotosListTab(
             ) {
                 itemsIndexed(items, key = { _, it -> it.id }) { index, item ->
                     ItemCard(
+                        strings = t,
+                        palette = p,
                         item = item,
                         index = index + 1,
                         onUpdate = onUpdateItem,
@@ -467,7 +591,7 @@ fun PhotosListTab(
 
             // Bottom summary bar
             Surface(
-                color = Color(0xFF1E293B),
+                color = p.surface,
                 tonalElevation = 6.dp,
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -480,24 +604,24 @@ fun PhotosListTab(
                         val photosCount = items.filter { it.itemType == ItemType.PHOTO }.sumOf { it.copiesCount }
                         val docsCount = items.filter { it.itemType == ItemType.DOCUMENT }.sumOf { it.copiesCount }
                         Text(
-                            text = "المجموع: $photosCount صورة | $docsCount مستند",
-                            color = Color.White,
+                            text = t.total(photosCount, docsCount),
+                            color = p.text,
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp
                         )
                         Text(
-                            text = "هوامش 0.6 سم | مسافة 1 ملم | بدون تداخل",
-                            color = Color(0xFF38BDF8),
+                            text = t.specsShort,
+                            color = p.accent,
                             fontSize = 11.sp
                         )
                     }
 
                     Button(
                         onClick = onGoToPreview,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                        colors = ButtonDefaults.buttonColors(containerColor = p.blue),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("عرض ملف الورق")
+                        Text(t.viewPaper)
                         Spacer(modifier = Modifier.width(6.dp))
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowForward,
@@ -513,16 +637,20 @@ fun PhotosListTab(
 
 @Composable
 fun ItemCard(
+    strings: StudioStrings,
+    palette: StudioPalette,
     item: PrintPhotoItem,
     index: Int,
     onUpdate: (PrintPhotoItem) -> Unit,
     onDelete: () -> Unit,
     onEditDimensions: () -> Unit
 ) {
+    val t = strings
+    val p = palette
     Card(
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
-        modifier = Modifier.fillMaxWidth().border(1.dp, Color(0xFF334155), RoundedCornerShape(14.dp))
+        colors = CardDefaults.cardColors(containerColor = p.surface),
+        modifier = Modifier.fillMaxWidth().border(1.dp, p.frame, RoundedCornerShape(14.dp))
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             // Header with type badge and clearly separated action buttons (Edit & Delete separated)
@@ -533,11 +661,11 @@ fun ItemCard(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Surface(
-                        color = if (item.itemType == ItemType.DOCUMENT) Color(0xFF1E3A8A) else Color(0xFF0F766E),
+                        color = if (item.itemType == ItemType.DOCUMENT) p.docBadge else p.photoBadge,
                         shape = RoundedCornerShape(6.dp)
                     ) {
                         Text(
-                            text = if (item.itemType == ItemType.DOCUMENT) "مستند / هوية" else "صورة عادية",
+                            text = if (item.itemType == ItemType.DOCUMENT) t.docBadge else t.photoBadge,
                             color = Color.White,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -547,7 +675,7 @@ fun ItemCard(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = item.name,
-                        color = Color.White,
+                        color = p.text,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp
                     )
@@ -562,20 +690,20 @@ fun ItemCard(
                         onClick = onEditDimensions,
                         modifier = Modifier
                             .size(36.dp)
-                            .background(Color(0xFF334155), RoundedCornerShape(8.dp))
+                            .background(p.frame, RoundedCornerShape(8.dp))
                             .testTag("edit_item_btn_$index")
                     ) {
-                        Icon(Icons.Default.Edit, contentDescription = "تعديل", tint = Color(0xFF38BDF8), modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Edit, contentDescription = t.edit, tint = p.accent, modifier = Modifier.size(18.dp))
                     }
 
                     IconButton(
                         onClick = onDelete,
                         modifier = Modifier
                             .size(36.dp)
-                            .background(Color(0xFF7F1D1D).copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                            .background(p.dangerBg, RoundedCornerShape(8.dp))
                             .testTag("delete_item_btn_$index")
                     ) {
-                        Icon(Icons.Default.Delete, contentDescription = "حذف", tint = Color(0xFFF87171), modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Delete, contentDescription = t.del, tint = p.danger, modifier = Modifier.size(18.dp))
                     }
                 }
             }
@@ -594,14 +722,14 @@ fun ItemCard(
                                 modifier = Modifier
                                     .size(60.dp, 44.dp)
                                     .clip(RoundedCornerShape(6.dp))
-                                    .background(Color.Black),
+                                    .background(p.canvas),
                                 contentAlignment = Alignment.Center
                             ) {
                                 item.sourceBitmap?.let { bmp ->
-                                    Image(bitmap = bmp.asImageBitmap(), contentDescription = "الأمامي", modifier = Modifier.fillMaxSize())
+                                    Image(bitmap = bmp.asImageBitmap(), contentDescription = t.front, modifier = Modifier.fillMaxSize())
                                 } ?: Icon(Icons.Default.Badge, contentDescription = null, tint = Color.Gray)
                             }
-                            Text("أمامي", color = Color(0xFF94A3B8), fontSize = 10.sp)
+                            Text(t.front, color = p.textDim, fontSize = 10.sp)
                         }
 
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -609,14 +737,14 @@ fun ItemCard(
                                 modifier = Modifier
                                     .size(60.dp, 44.dp)
                                     .clip(RoundedCornerShape(6.dp))
-                                    .background(Color.Black),
+                                    .background(p.canvas),
                                 contentAlignment = Alignment.Center
                             ) {
                                 item.backBitmap?.let { bmp ->
-                                    Image(bitmap = bmp.asImageBitmap(), contentDescription = "خلفي", modifier = Modifier.fillMaxSize())
-                                } ?: Text("بدون", color = Color(0xFF64748B), fontSize = 9.sp)
+                                    Image(bitmap = bmp.asImageBitmap(), contentDescription = t.backFace, modifier = Modifier.fillMaxSize())
+                                } ?: Text(t.none, color = p.textFaint, fontSize = 9.sp)
                             }
-                            Text("خلفي", color = Color(0xFF94A3B8), fontSize = 10.sp)
+                            Text(t.backFace, color = p.textDim, fontSize = 10.sp)
                         }
                     }
                 } else {
@@ -624,7 +752,7 @@ fun ItemCard(
                         modifier = Modifier
                             .size(60.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(Color.Black),
+                            .background(p.canvas),
                         contentAlignment = Alignment.Center
                     ) {
                         item.sourceBitmap?.let { bmp ->
@@ -637,8 +765,8 @@ fun ItemCard(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "القياس: ${item.dimensionDisplayText}",
-                        color = Color(0xFFE2E8F0),
+                        text = t.dims(item.dimensionDisplayText),
+                        color = p.textHigh,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -646,16 +774,16 @@ fun ItemCard(
                     if (item.itemType == ItemType.DOCUMENT) {
                         Text(
                             text = if (item.duplexMode == DocumentDuplexMode.SAME_PAGE)
-                                "الوجهان بنفس الصفحة (يمين ويسار ببعد 0.6 سم)"
+                                t.samePageDetail
                             else
-                                "الوجه الخلفي في ظهر الورقة (صفحة ثانية)",
-                            color = Color(0xFF38BDF8),
+                                t.backSideDetail,
+                            color = p.accent,
                             fontSize = 11.sp
                         )
                     } else {
                         Text(
-                            text = if (item.widthCm == 3.0f) "6 صور بالسطر كحد أقصى (عرض 3 سم)" else "أبعاد خاصة",
-                            color = Color(0xFF94A3B8),
+                            text = if (item.widthCm == 3.0f) t.standardRows else t.customDims,
+                            color = p.textDim,
                             fontSize = 11.sp
                         )
                     }
@@ -668,8 +796,8 @@ fun ItemCard(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = "عدد النسخ:",
-                            color = Color(0xFFCBD5E1),
+                            text = t.copiesLabel,
+                            color = p.textHigh,
                             fontSize = 11.sp
                         )
 
@@ -681,12 +809,12 @@ fun ItemCard(
                             },
                             modifier = Modifier.size(32.dp).testTag("decrease_copies_$index")
                         ) {
-                            Icon(Icons.Default.Remove, contentDescription = "تقليل", tint = Color.White, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Remove, contentDescription = t.decrease, tint = p.text, modifier = Modifier.size(18.dp))
                         }
 
                         Text(
                             text = "${item.copiesCount}",
-                            color = Color(0xFF38BDF8),
+                            color = p.accent,
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
                             modifier = Modifier.padding(horizontal = 4.dp)
@@ -698,7 +826,7 @@ fun ItemCard(
                             },
                             modifier = Modifier.size(32.dp).testTag("increase_copies_$index")
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = "زيادة", tint = Color(0xFF38BDF8), modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Add, contentDescription = t.increase, tint = p.accent, modifier = Modifier.size(18.dp))
                         }
                     }
                 }
@@ -709,14 +837,18 @@ fun ItemCard(
 
 @Composable
 fun AddTypeChoiceDialog(
+    strings: StudioStrings,
+    palette: StudioPalette,
     onDismiss: () -> Unit,
     onSelectPhoto: () -> Unit,
     onSelectDocument: () -> Unit
 ) {
+    val t = strings
+    val p = palette
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+            colors = CardDefaults.cardColors(containerColor = p.surface),
             modifier = Modifier.padding(16.dp)
         ) {
             Column(
@@ -724,10 +856,10 @@ fun AddTypeChoiceDialog(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "اختر نوع العنصر المراد إضافته",
+                    text = t.chooseTitle,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
-                    color = Color.White
+                    color = p.text
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -736,19 +868,19 @@ fun AddTypeChoiceDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onSelectPhoto() }
-                        .border(1.dp, Color(0xFF0284C7), RoundedCornerShape(12.dp)),
+                        .border(1.dp, p.action, RoundedCornerShape(12.dp)),
                     shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))
+                    colors = CardDefaults.cardColors(containerColor = p.inputBg)
                 ) {
                     Row(
                         modifier = Modifier.padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Photo, contentDescription = null, tint = Color(0xFF38BDF8), modifier = Modifier.size(32.dp))
+                        Icon(Icons.Default.Photo, contentDescription = null, tint = p.accent, modifier = Modifier.size(32.dp))
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
-                            Text("صورة شخصية / صور عادية", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Text("تتكرر في صفوف شبكة A4 (مثل 3×4 سم، 6 بالسطر)", color = Color(0xFF94A3B8), fontSize = 11.sp)
+                            Text(t.photoOptionTitle, color = p.text, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text(t.photoOptionBody, color = p.textDim, fontSize = 11.sp)
                         }
                     }
                 }
@@ -759,19 +891,19 @@ fun AddTypeChoiceDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onSelectDocument() }
-                        .border(1.dp, Color(0xFF38BDF8), RoundedCornerShape(12.dp)),
+                        .border(1.dp, p.accent, RoundedCornerShape(12.dp)),
                     shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))
+                    colors = CardDefaults.cardColors(containerColor = p.inputBg)
                 ) {
                     Row(
                         modifier = Modifier.padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Badge, contentDescription = null, tint = Color(0xFF38BDF8), modifier = Modifier.size(32.dp))
+                        Icon(Icons.Default.Badge, contentDescription = null, tint = p.accent, modifier = Modifier.size(32.dp))
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
-                            Text("مستند / هوية (وجه أمامي وخلفي)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Text("يوضع بصف مستقل أسفل الصور وبمسافة 1 ملم", color = Color(0xFF94A3B8), fontSize = 11.sp)
+                            Text(t.docOptionTitle, color = p.text, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text(t.docOptionBody, color = p.textDim, fontSize = 11.sp)
                         }
                     }
                 }
@@ -779,7 +911,7 @@ fun AddTypeChoiceDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
-                    Text("إلغاء", color = Color(0xFF94A3B8))
+                    Text(t.cancel, color = p.textDim)
                 }
             }
         }
@@ -788,9 +920,13 @@ fun AddTypeChoiceDialog(
 
 @Composable
 fun AddDocumentDialog(
+    strings: StudioStrings,
+    palette: StudioPalette,
     onDismiss: () -> Unit,
     onConfirm: (PrintPhotoItem) -> Unit
 ) {
+    val t = strings
+    val p = palette
     val context = LocalContext.current
     var frontBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var backBitmap by remember { mutableStateOf<Bitmap?>(null) }
@@ -818,7 +954,7 @@ fun AddDocumentDialog(
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+            colors = CardDefaults.cardColors(containerColor = p.surface),
             modifier = Modifier.fillMaxWidth().padding(10.dp)
         ) {
             Column(
@@ -828,10 +964,10 @@ fun AddDocumentDialog(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "إضافة مستند أو هوية (وجه أمامي وخلفي)",
+                    text = t.addDocTitle,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
-                    color = Color.White
+                    color = p.text
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -849,11 +985,11 @@ fun AddDocumentDialog(
                             }
                             .border(
                                 1.5.dp,
-                                if (frontBitmap != null) Color(0xFF38BDF8) else Color(0xFF475569),
+                                if (frontBitmap != null) p.accent else p.inputBorder,
                                 RoundedCornerShape(10.dp)
                             ),
                         shape = RoundedCornerShape(10.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))
+                        colors = CardDefaults.cardColors(containerColor = p.inputBg)
                     ) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             if (frontBitmap != null) {
@@ -863,14 +999,14 @@ fun AddDocumentDialog(
                                     shape = RoundedCornerShape(4.dp),
                                     modifier = Modifier.align(Alignment.BottomCenter).padding(4.dp)
                                 ) {
-                                    Text("الوجه الأمامي ✔", color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(2.dp))
+                                    Text(t.frontDone, color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(2.dp))
                                 }
                             } else {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, tint = Color(0xFF38BDF8))
+                                    Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, tint = p.accent)
                                     Spacer(modifier = Modifier.height(4.dp))
-                                    Text("صورة الوجه الأمامي", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                    Text("(مطلوب)", color = Color(0xFF94A3B8), fontSize = 9.sp)
+                                    Text(t.frontPick, color = p.text, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text(t.requiredTag, color = p.textDim, fontSize = 9.sp)
                                 }
                             }
                         }
@@ -885,11 +1021,11 @@ fun AddDocumentDialog(
                             }
                             .border(
                                 1.5.dp,
-                                if (backBitmap != null) Color(0xFF38BDF8) else Color(0xFF475569),
+                                if (backBitmap != null) p.accent else p.inputBorder,
                                 RoundedCornerShape(10.dp)
                             ),
                         shape = RoundedCornerShape(10.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))
+                        colors = CardDefaults.cardColors(containerColor = p.inputBg)
                     ) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             if (backBitmap != null) {
@@ -901,7 +1037,7 @@ fun AddDocumentDialog(
                                         onClick = { backBitmap = null },
                                         modifier = Modifier.size(22.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape)
                                     ) {
-                                        Icon(Icons.Default.Close, contentDescription = "حذف", tint = Color.White, modifier = Modifier.size(14.dp))
+                                        Icon(Icons.Default.Close, contentDescription = t.del, tint = Color.White, modifier = Modifier.size(14.dp))
                                     }
                                 }
                                 Surface(
@@ -909,14 +1045,14 @@ fun AddDocumentDialog(
                                     shape = RoundedCornerShape(4.dp),
                                     modifier = Modifier.align(Alignment.BottomCenter).padding(4.dp)
                                 ) {
-                                    Text("الوجه الخلفي ✔", color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(2.dp))
+                                    Text(t.backDone, color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(2.dp))
                                 }
                             } else {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, tint = Color(0xFF94A3B8))
+                                    Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, tint = p.textDim)
                                     Spacer(modifier = Modifier.height(4.dp))
-                                    Text("صورة الوجه الخلفي", color = Color.White, fontSize = 11.sp)
-                                    Text("(اختياري)", color = Color(0xFF94A3B8), fontSize = 9.sp)
+                                    Text(t.backPickHint, color = p.text, fontSize = 11.sp)
+                                    Text(t.optionalTag, color = p.textDim, fontSize = 9.sp)
                                 }
                             }
                         }
@@ -926,8 +1062,8 @@ fun AddDocumentDialog(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 Text(
-                    text = "موضع الوجهين في الطباعة:",
-                    color = Color.White,
+                    text = t.placementTitle,
+                    color = p.text,
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.sp,
                     modifier = Modifier.fillMaxWidth()
@@ -944,12 +1080,12 @@ fun AddDocumentDialog(
                     RadioButton(
                         selected = duplexMode == DocumentDuplexMode.SAME_PAGE,
                         onClick = { duplexMode = DocumentDuplexMode.SAME_PAGE },
-                        colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF38BDF8))
+                        colors = RadioButtonDefaults.colors(selectedColor = p.accent)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Column {
-                        Text("الوجهان بنفس الصفحة", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        Text("الأمامي على اليمين والخلفي على اليسار (0.6 سم من حواف الورقة)", color = Color(0xFF94A3B8), fontSize = 10.sp)
+                        Text(t.samePageTitle, color = p.text, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(t.samePageBody, color = p.textDim, fontSize = 10.sp)
                     }
                 }
 
@@ -962,12 +1098,12 @@ fun AddDocumentDialog(
                     RadioButton(
                         selected = duplexMode == DocumentDuplexMode.BACK_SIDE,
                         onClick = { duplexMode = DocumentDuplexMode.BACK_SIDE },
-                        colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF38BDF8))
+                        colors = RadioButtonDefaults.colors(selectedColor = p.accent)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Column {
-                        Text("الوجه الخلفي في ظهر الورقة (صفحة ثانية)", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        Text("لطباعة الوجهين (Duplex) متطابقين ظهر لظهر بدقة", color = Color(0xFF94A3B8), fontSize = 10.sp)
+                        Text(t.backSideTitle, color = p.text, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(t.backSideBody, color = p.textDim, fontSize = 10.sp)
                     }
                 }
 
@@ -980,40 +1116,40 @@ fun AddDocumentDialog(
                     OutlinedTextField(
                         value = widthInput,
                         onValueChange = { widthInput = it },
-                        label = { Text("العرض (سم)") },
+                        label = { Text(t.widthCm) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.weight(1f),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedContainerColor = Color(0xFF0F172A),
-                            unfocusedContainerColor = Color(0xFF0F172A),
-                            focusedLabelColor = Color(0xFF38BDF8),
-                            unfocusedLabelColor = Color(0xFF94A3B8),
-                            focusedBorderColor = Color(0xFF38BDF8),
-                            unfocusedBorderColor = Color(0xFF475569),
-                            cursorColor = Color.White
+                            focusedTextColor = p.text,
+                            unfocusedTextColor = p.text,
+                            focusedContainerColor = p.inputBg,
+                            unfocusedContainerColor = p.inputBg,
+                            focusedLabelColor = p.accent,
+                            unfocusedLabelColor = p.textDim,
+                            focusedBorderColor = p.accent,
+                            unfocusedBorderColor = p.inputBorder,
+                            cursorColor = p.text
                         )
                     )
 
                     OutlinedTextField(
                         value = heightInput,
                         onValueChange = { heightInput = it },
-                        label = { Text("الارتفاع (سم)") },
+                        label = { Text(t.heightCm) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.weight(1f),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedContainerColor = Color(0xFF0F172A),
-                            unfocusedContainerColor = Color(0xFF0F172A),
-                            focusedLabelColor = Color(0xFF38BDF8),
-                            unfocusedLabelColor = Color(0xFF94A3B8),
-                            focusedBorderColor = Color(0xFF38BDF8),
-                            unfocusedBorderColor = Color(0xFF475569),
-                            cursorColor = Color.White
+                            focusedTextColor = p.text,
+                            unfocusedTextColor = p.text,
+                            focusedContainerColor = p.inputBg,
+                            unfocusedContainerColor = p.inputBg,
+                            focusedLabelColor = p.accent,
+                            unfocusedLabelColor = p.textDim,
+                            focusedBorderColor = p.accent,
+                            unfocusedBorderColor = p.inputBorder,
+                            cursorColor = p.text
                         )
                     )
                 }
@@ -1021,24 +1157,24 @@ fun AddDocumentDialog(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 val docPresets = listOf(
-                    Pair("بطاقة هوية (8.5×5.4)", Pair(8.5f, 5.4f)),
-                    Pair("جواز سفر (12.5×8.8)", Pair(12.5f, 8.8f)),
-                    Pair("نصف ورقة A5 (14.8×21)", Pair(14.8f, 21.0f))
+                    Triple(t.presetId, 8.5f, 5.4f),
+                    Triple(t.presetPassport, 12.5f, 8.8f),
+                    Triple(t.presetHalfA5, 14.8f, 21.0f)
                 )
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(docPresets) { (name, size) ->
+                    items(docPresets) { (name, w, h) ->
                         FilterChip(
-                            selected = widthInput == size.first.toString() && heightInput == size.second.toString(),
+                            selected = widthInput == w.toString() && heightInput == h.toString(),
                             onClick = {
-                                widthInput = size.first.toString()
-                                heightInput = size.second.toString()
+                                widthInput = w.toString()
+                                heightInput = h.toString()
                             },
                             label = { Text(name, fontSize = 10.sp) },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = Color(0xFF0284C7),
+                                selectedContainerColor = p.action,
                                 selectedLabelColor = Color.White,
-                                containerColor = Color(0xFF0F172A),
-                                labelColor = Color(0xFFCBD5E1)
+                                containerColor = p.chipBg,
+                                labelColor = p.chipText
                             )
                         )
                     }
@@ -1049,20 +1185,20 @@ fun AddDocumentDialog(
                 OutlinedTextField(
                     value = copiesInput,
                     onValueChange = { copiesInput = it },
-                    label = { Text("عدد النسخ المطلوب طباعتها") },
+                    label = { Text(t.copiesPrompt) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedContainerColor = Color(0xFF0F172A),
-                        unfocusedContainerColor = Color(0xFF0F172A),
-                        focusedLabelColor = Color(0xFF38BDF8),
-                        unfocusedLabelColor = Color(0xFF94A3B8),
-                        focusedBorderColor = Color(0xFF38BDF8),
-                        unfocusedBorderColor = Color(0xFF475569),
-                        cursorColor = Color.White
+                        focusedTextColor = p.text,
+                        unfocusedTextColor = p.text,
+                        focusedContainerColor = p.inputBg,
+                        unfocusedContainerColor = p.inputBg,
+                        focusedLabelColor = p.accent,
+                        unfocusedLabelColor = p.textDim,
+                        focusedBorderColor = p.accent,
+                        unfocusedBorderColor = p.inputBorder,
+                        cursorColor = p.text
                     )
                 )
 
@@ -1073,7 +1209,7 @@ fun AddDocumentDialog(
                     horizontalArrangement = Arrangement.End
                 ) {
                     TextButton(onClick = onDismiss) {
-                        Text("إلغاء", color = Color(0xFF94A3B8))
+                        Text(t.cancel, color = p.textDim)
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
@@ -1084,7 +1220,7 @@ fun AddDocumentDialog(
                             if (frontBitmap != null && w > 0f && h > 0f && c > 0) {
                                 onConfirm(
                                     PrintPhotoItem(
-                                        name = "مستند ${w}×${h} سم",
+                                        name = t.docName(w, h),
                                         itemType = ItemType.DOCUMENT,
                                         sourceBitmap = frontBitmap,
                                         backBitmap = backBitmap,
@@ -1095,12 +1231,12 @@ fun AddDocumentDialog(
                                     )
                                 )
                             } else {
-                                Toast.makeText(context, "يرجى تحديد صورة الوجه الأمامي للمستند", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, t.needFront, Toast.LENGTH_SHORT).show()
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7))
+                        colors = ButtonDefaults.buttonColors(containerColor = p.action)
                     ) {
-                        Text("إضافة المستند")
+                        Text(t.addDocAction)
                     }
                 }
             }
@@ -1110,10 +1246,14 @@ fun AddDocumentDialog(
 
 @Composable
 fun EditPhotoDimensionDialog(
+    strings: StudioStrings,
+    palette: StudioPalette,
     item: PrintPhotoItem,
     onDismiss: () -> Unit,
     onConfirm: (PrintPhotoItem) -> Unit
 ) {
+    val t = strings
+    val p = palette
     var widthInput by remember { mutableStateOf(item.widthCm.toString()) }
     var heightInput by remember { mutableStateOf(item.heightCm.toString()) }
     var copiesInput by remember { mutableStateOf(item.copiesCount.toString()) }
@@ -1122,7 +1262,7 @@ fun EditPhotoDimensionDialog(
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+            colors = CardDefaults.cardColors(containerColor = p.surface),
             modifier = Modifier.padding(16.dp)
         ) {
             Column(
@@ -1130,10 +1270,10 @@ fun EditPhotoDimensionDialog(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "تعديل أبعاد وعدد نسخ: ${item.name}",
+                    text = t.editTitle(item.name),
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
-                    color = Color.White
+                    color = p.text
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -1145,40 +1285,40 @@ fun EditPhotoDimensionDialog(
                     OutlinedTextField(
                         value = widthInput,
                         onValueChange = { widthInput = it },
-                        label = { Text("العرض (سم)") },
+                        label = { Text(t.widthCm) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.weight(1f),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedContainerColor = Color(0xFF0F172A),
-                            unfocusedContainerColor = Color(0xFF0F172A),
-                            focusedLabelColor = Color(0xFF38BDF8),
-                            unfocusedLabelColor = Color(0xFF94A3B8),
-                            focusedBorderColor = Color(0xFF38BDF8),
-                            unfocusedBorderColor = Color(0xFF475569),
-                            cursorColor = Color.White
+                            focusedTextColor = p.text,
+                            unfocusedTextColor = p.text,
+                            focusedContainerColor = p.inputBg,
+                            unfocusedContainerColor = p.inputBg,
+                            focusedLabelColor = p.accent,
+                            unfocusedLabelColor = p.textDim,
+                            focusedBorderColor = p.accent,
+                            unfocusedBorderColor = p.inputBorder,
+                            cursorColor = p.text
                         )
                     )
 
                     OutlinedTextField(
                         value = heightInput,
                         onValueChange = { heightInput = it },
-                        label = { Text("الارتفاع (سم)") },
+                        label = { Text(t.heightCm) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.weight(1f),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedContainerColor = Color(0xFF0F172A),
-                            unfocusedContainerColor = Color(0xFF0F172A),
-                            focusedLabelColor = Color(0xFF38BDF8),
-                            unfocusedLabelColor = Color(0xFF94A3B8),
-                            focusedBorderColor = Color(0xFF38BDF8),
-                            unfocusedBorderColor = Color(0xFF475569),
-                            cursorColor = Color.White
+                            focusedTextColor = p.text,
+                            unfocusedTextColor = p.text,
+                            focusedContainerColor = p.inputBg,
+                            unfocusedContainerColor = p.inputBg,
+                            focusedLabelColor = p.accent,
+                            unfocusedLabelColor = p.textDim,
+                            focusedBorderColor = p.accent,
+                            unfocusedBorderColor = p.inputBorder,
+                            cursorColor = p.text
                         )
                     )
                 }
@@ -1186,8 +1326,8 @@ fun EditPhotoDimensionDialog(
                 if (item.itemType == ItemType.DOCUMENT && item.hasBackFace) {
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "موضع الوجهين في الطباعة:",
-                        color = Color.White,
+                        text = t.placementTitle,
+                        color = p.text,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.fillMaxWidth()
@@ -1201,9 +1341,9 @@ fun EditPhotoDimensionDialog(
                         RadioButton(
                             selected = duplexMode == DocumentDuplexMode.SAME_PAGE,
                             onClick = { duplexMode = DocumentDuplexMode.SAME_PAGE },
-                            colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF38BDF8))
+                            colors = RadioButtonDefaults.colors(selectedColor = p.accent)
                         )
-                        Text("الوجهان بنفس الصفحة (يمين ويسار)", color = Color.White, fontSize = 11.sp)
+                        Text(t.samePageShort, color = p.text, fontSize = 11.sp)
                     }
                     Row(
                         modifier = Modifier
@@ -1214,9 +1354,9 @@ fun EditPhotoDimensionDialog(
                         RadioButton(
                             selected = duplexMode == DocumentDuplexMode.BACK_SIDE,
                             onClick = { duplexMode = DocumentDuplexMode.BACK_SIDE },
-                            colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF38BDF8))
+                            colors = RadioButtonDefaults.colors(selectedColor = p.accent)
                         )
-                        Text("الوجه الخلفي بظهر الورقة (صفحة ثانية)", color = Color.White, fontSize = 11.sp)
+                        Text(t.backSideShort, color = p.text, fontSize = 11.sp)
                     }
                 }
 
@@ -1225,20 +1365,20 @@ fun EditPhotoDimensionDialog(
                 OutlinedTextField(
                     value = copiesInput,
                     onValueChange = { copiesInput = it },
-                    label = { Text("عدد النسخ المطلوب طباعتها") },
+                    label = { Text(t.copiesPrompt) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedContainerColor = Color(0xFF0F172A),
-                        unfocusedContainerColor = Color(0xFF0F172A),
-                        focusedLabelColor = Color(0xFF38BDF8),
-                        unfocusedLabelColor = Color(0xFF94A3B8),
-                        focusedBorderColor = Color(0xFF38BDF8),
-                        unfocusedBorderColor = Color(0xFF475569),
-                        cursorColor = Color.White
+                        focusedTextColor = p.text,
+                        unfocusedTextColor = p.text,
+                        focusedContainerColor = p.inputBg,
+                        unfocusedContainerColor = p.inputBg,
+                        focusedLabelColor = p.accent,
+                        unfocusedLabelColor = p.textDim,
+                        focusedBorderColor = p.accent,
+                        unfocusedBorderColor = p.inputBorder,
+                        cursorColor = p.text
                     )
                 )
 
@@ -1249,7 +1389,7 @@ fun EditPhotoDimensionDialog(
                     horizontalArrangement = Arrangement.End
                 ) {
                     TextButton(onClick = onDismiss) {
-                        Text("إلغاء", color = Color(0xFF94A3B8))
+                        Text(t.cancel, color = p.textDim)
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
@@ -1268,9 +1408,9 @@ fun EditPhotoDimensionDialog(
                                 )
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7))
+                        colors = ButtonDefaults.buttonColors(containerColor = p.action)
                     ) {
-                        Text("حفظ التعديل")
+                        Text(t.saveEdit)
                     }
                 }
             }
@@ -1283,6 +1423,8 @@ fun EditPhotoDimensionDialog(
  */
 @Composable
 fun A4WordMultiPageTab(
+    strings: StudioStrings,
+    palette: StudioPalette,
     gridPlan: A4GridPlan,
     pageBitmaps: Map<Int, Bitmap>,
     isRendering: Boolean,
@@ -1291,10 +1433,12 @@ fun A4WordMultiPageTab(
     onSavePageHiRes: (Int) -> Unit,
     onSaveAllPagesHiRes: () -> Unit
 ) {
+    val t = strings
+    val p = palette
     Column(modifier = Modifier.fillMaxSize()) {
         if (isRendering && pageBitmaps.isEmpty()) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Color(0xFF38BDF8), modifier = Modifier.size(46.dp))
+                CircularProgressIndicator(color = p.accent, modifier = Modifier.size(46.dp))
             }
         } else {
             // Vertical scrolling view showing all pages of the document like Word
@@ -1312,9 +1456,9 @@ fun A4WordMultiPageTab(
                     val isFrontPage = gridPlan.placedPhotos.any { !it.isBackSide && it.pageIndex == pageIdx }
 
                     val pageLabel = when {
-                        isBackPage && !isFrontPage -> "ورقة ${pageIdx + 1} من ${gridPlan.totalPagesCount} (الوجه الخلفي - Duplex)"
-                        !isBackPage && isFrontPage -> "ورقة ${pageIdx + 1} من ${gridPlan.totalPagesCount} (الوجه الأمامي)"
-                        else -> "ورقة ${pageIdx + 1} من ${gridPlan.totalPagesCount}"
+                        isBackPage && !isFrontPage -> t.sheetBack(pageIdx + 1, gridPlan.totalPagesCount)
+                        !isBackPage && isFrontPage -> t.sheetFront(pageIdx + 1, gridPlan.totalPagesCount)
+                        else -> t.sheetPlain(pageIdx + 1, gridPlan.totalPagesCount)
                     }
 
                     Column(
@@ -1330,7 +1474,7 @@ fun A4WordMultiPageTab(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Surface(
-                                color = if (isBackPage) Color(0xFF1E3A8A) else Color(0xFF0F766E),
+                                color = if (isBackPage) p.docBadge else p.photoBadge,
                                 shape = RoundedCornerShape(6.dp)
                             ) {
                                 Text(
@@ -1346,9 +1490,9 @@ fun A4WordMultiPageTab(
                                 onClick = { onSavePageHiRes(pageIdx) },
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                             ) {
-                                Icon(Icons.Default.Download, contentDescription = null, tint = Color(0xFF38BDF8), modifier = Modifier.size(14.dp))
+                                Icon(Icons.Default.Download, contentDescription = null, tint = p.accent, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("حفظ هذه الورقة", color = Color(0xFF38BDF8), fontSize = 11.sp)
+                                Text(t.saveThisSheet, color = p.accent, fontSize = 11.sp)
                             }
                         }
 
@@ -1360,7 +1504,7 @@ fun A4WordMultiPageTab(
                                 .fillMaxWidth()
                                 .aspectRatio(21.0f / 29.7f)
                                 .shadow(12.dp, shape = RoundedCornerShape(4.dp))
-                                .border(1.dp, Color(0xFFCBD5E1), RoundedCornerShape(4.dp)),
+                                .border(1.dp, p.frame, RoundedCornerShape(4.dp)),
                             shape = RoundedCornerShape(4.dp),
                             colors = CardDefaults.cardColors(containerColor = Color.White)
                         ) {
@@ -1372,7 +1516,7 @@ fun A4WordMultiPageTab(
                                 )
                             } else {
                                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    CircularProgressIndicator(color = Color(0xFF38BDF8), modifier = Modifier.size(32.dp))
+                                    CircularProgressIndicator(color = p.accent, modifier = Modifier.size(32.dp))
                                 }
                             }
                         }
@@ -1385,7 +1529,7 @@ fun A4WordMultiPageTab(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))
+            colors = CardDefaults.cardColors(containerColor = p.surface)
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
                 Row(
@@ -1394,19 +1538,19 @@ fun A4WordMultiPageTab(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "تفاصيل ورقة الطباعة (Photo Paper):",
-                        color = Color.White,
+                        text = t.exportSummaryTitle,
+                        color = p.text,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp
                     )
 
                     Surface(
-                        color = Color(0xFF0284C7).copy(alpha = 0.2f),
+                        color = p.accent.copy(alpha = 0.2f),
                         shape = RoundedCornerShape(6.dp)
                     ) {
                         Text(
-                            text = "${gridPlan.totalPagesCount} ورقة | هوامش 0.6 سم | مسافة 1 ملم",
-                            color = Color(0xFF38BDF8),
+                            text = t.exportSummaryBadge(gridPlan.totalPagesCount),
+                            color = p.accent,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
@@ -1420,18 +1564,18 @@ fun A4WordMultiPageTab(
                 Button(
                     onClick = onExportDocx,
                     modifier = Modifier.fillMaxWidth().height(48.dp).testTag("export_docx_btn"),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                    colors = ButtonDefaults.buttonColors(containerColor = p.blue),
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     if (isExporting) {
                         CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("جاري بناء ملف Word...")
+                        Text(t.buildingDocx)
                     } else {
                         Icon(Icons.Default.Description, contentDescription = null, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "تصدير إلى ملف Word (.docx) - التفاف أمام النص لكافة الصفحات",
+                            text = t.exportDocxBtn,
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp
                         )
@@ -1445,17 +1589,17 @@ fun A4WordMultiPageTab(
                     onClick = onSaveAllPagesHiRes,
                     modifier = Modifier.fillMaxWidth().height(42.dp).testTag("save_all_pages_btn"),
                     shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF38BDF8))
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = p.accent)
                 ) {
                     Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("حفظ كافة أوراق الملف بدقة 300 DPI (ورق مقوى)", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    Text(t.exportAllBtn, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                 }
 
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "• تظهر جميع الصفحات بالتمرير الرأسي تماماً كملف Word، ويتم وضع المستندات بصفوف مستقلة أسفل الصور بمسافة 1 ملم.",
-                    color = Color(0xFF94A3B8),
+                    text = t.exportNote,
+                    color = p.textDim,
                     fontSize = 10.sp,
                     lineHeight = 14.sp
                 )
@@ -1466,7 +1610,8 @@ fun A4WordMultiPageTab(
 
 private suspend fun exportAndShareDocx(
     context: Context,
-    plan: A4GridPlan
+    plan: A4GridPlan,
+    t: StudioStrings
 ) {
     try {
         val fileName = "PhotoMagic_A4_Multi_${System.currentTimeMillis()}.docx"
@@ -1485,25 +1630,26 @@ private suspend fun exportAndShareDocx(
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_SUBJECT, "شبكة صور ومستندات A4 لورق الصور المقوى")
-            putExtra(Intent.EXTRA_TEXT, "تم إنشاء ملف Word (.docx) لصفحات A4 بهامش 0.6 سم ومسافة 1 ملم والتفاف حر أمام النص.")
+            putExtra(Intent.EXTRA_SUBJECT, t.shareSubject)
+            putExtra(Intent.EXTRA_TEXT, t.shareText)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
 
-        context.startActivity(Intent.createChooser(shareIntent, "مشاركة أو فتح ملف Word"))
+        context.startActivity(Intent.createChooser(shareIntent, t.shareChooser))
     } catch (e: Exception) {
         e.printStackTrace()
-        Toast.makeText(context, "خطأ في تصدير Word: ${e.message}", Toast.LENGTH_LONG).show()
+        Toast.makeText(context, t.wordError(e.message ?: ""), Toast.LENGTH_LONG).show()
     }
 }
 
 private suspend fun saveA4HighResImage(
     context: Context,
     plan: A4GridPlan,
-    pageIndex: Int
+    pageIndex: Int,
+    t: StudioStrings
 ) {
     try {
-        Toast.makeText(context, "جاري معالجة ورقة ${pageIndex + 1} بدقة 300 DPI...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, t.processing(pageIndex + 1), Toast.LENGTH_SHORT).show()
         val a4HiRes = BitmapProcessor.renderA4Sheet(
             plan = plan,
             pageIndex = pageIndex,
@@ -1512,10 +1658,10 @@ private suspend fun saveA4HighResImage(
 
         val fileName = "PhotoMagic_A4_p${pageIndex + 1}_${System.currentTimeMillis()}.png"
         saveBitmapToGallery(context, a4HiRes, fileName)
-        Toast.makeText(context, "تم حفظ الورقة ${pageIndex + 1} بنجاح في مجلد الصور!", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, t.savedOk(pageIndex + 1), Toast.LENGTH_SHORT).show()
     } catch (e: Exception) {
         e.printStackTrace()
-        Toast.makeText(context, "فشل الحفظ: ${e.message}", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, t.saveFailed(e.message ?: ""), Toast.LENGTH_SHORT).show()
     }
 }
 

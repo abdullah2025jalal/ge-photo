@@ -1,6 +1,5 @@
 package com.abodycode.photomagic.ui.auth
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,23 +22,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.abodycode.photomagic.R
 
-/// Header shown on the FIRST screen after a successful sign-in (p2p dish
-/// home header, with the ABODY CODE logo swapping the antenna glyph):
+/// Actions row shown on the screen after a successful sign-in:
 ///
-/// * Fixed visual row: ABODY logo + language toggle + theme toggle on the
-///   LEFT, "تواصل معي" on the RIGHT — independent of locale direction.
+/// * Fixed visual row: language toggle + theme toggle on the LEFT,
+///   "تواصل معي" on the RIGHT — independent of locale direction.
 /// * Below the actions: a small quiet sign-out row (aligned to the end).
 ///
-/// The studio content of PhotoMagic is composed right below this header.
+/// The ABODY CODE logo itself is NOT here: the studio screen directly below
+/// renders it BIG and CENTERED with the "add photo" button under it.
 @Composable
 fun AuthenticatedHeader(
     dark: Boolean,
@@ -69,14 +65,6 @@ fun AuthenticatedHeader(
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // ABODY CODE brand badge on the first screen.
-                    Image(
-                        painter = painterResource(R.drawable.abody_code_logo),
-                        contentDescription = "ABODY CODE",
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.size(height = 34.dp, width = 34.dp),
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
                     LanguageToggle(
                         locale = locale,
                         onLocaleChange = onLocaleChange,

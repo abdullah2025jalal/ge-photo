@@ -85,6 +85,8 @@ const I18N = {
     /* studio */
     tabItems: 'العناصر',
     tabPapers: 'معاينة الورق',
+    addPhoto: 'إضافة صورة',
+    back: 'رجوع',
     emptyTitle: 'لا توجد عناصر مضافة بعد',
     emptyBody: 'أضف صوراً شخصية (مثل 3×4 سم) أو مستندات وهوية بوجهين لطباعتها على ورقة A4.',
     addItem: 'إضافة عنصر',
@@ -165,6 +167,8 @@ const I18N = {
     installHelpBrowser: 'Open the browser menu (⋮) and choose "Install app" or "Add to Home screen".',
     tabItems: 'Items',
     tabPapers: 'Paper preview',
+    addPhoto: 'Add photo',
+    back: 'Back',
     emptyTitle: 'No items added yet',
     emptyBody: 'Add portrait photos (e.g. 3×4 cm) or two-sided documents to print them on an A4 sheet.',
     addItem: 'Add item',
@@ -303,6 +307,16 @@ function applyLocale(next) {
   });
   ['langEn', 'langEnH'].forEach((id) => $(id) && $(id).classList.toggle('on', locale === 'en'));
   ['langAr', 'langArH'].forEach((id) => $(id) && $(id).classList.toggle('on', locale === 'ar'));
+
+  // Localize the arrow + label of the back button beside the home badge
+  // (RTL: points right, LTR: points left).
+  const backBtn = $('btnBackStep');
+  if (backBtn) {
+    const label = t('back');
+    backBtn.setAttribute('aria-label', label);
+    backBtn.setAttribute('title', label);
+    backBtn.textContent = locale === 'ar' ? '→' : '←';
+  }
 
   if (items.length) {
     renderItems();
@@ -689,6 +703,22 @@ document.querySelectorAll('[data-close-sheets]').forEach((btn) =>
 );
 
 $('btnOpenAdd').addEventListener('click', () => show($('chooseSheet')));
+// The centered "add photo" button under the big home logo opens the SAME
+// add-type chooser as the empty-state button.
+$('btnAddHome').addEventListener('click', () => show($('chooseSheet')));
+
+// Back button beside the home badge: returns ONE step in the app — closes
+// any open sheet first, otherwise returns from the paper-preview tab to
+// the items tab. No-op when there is nothing to go back to.
+$('btnBackStep').addEventListener('click', () => {
+  const openSheet = [$('chooseSheet'), $('docSheet'), $('contactSheet')].find(
+    (el) => !el.classList.contains('hidden')
+  );
+  if (openSheet) { hide(openSheet); return; }
+  if (!$('panePapers').classList.contains('hidden')) {
+    $('tabItems').click();
+  }
+});
 $('pickDoc').addEventListener('click', () => {
   hide($('chooseSheet'));
   show($('docSheet'));

@@ -252,9 +252,11 @@ private fun PhotoMagicApp() {
                                     onSignOut = { signOut() },
                                 )
                                 // The studio content takes the remaining height
-                                // below the ABODY CODE header.
+                                // below the actions header. It receives locale +
+                                // dark so the ENTIRE studio (tabs, cards, dialogs,
+                                // toasts) translates and follows dark/light.
                                 Box(modifier = Modifier.weight(1f)) {
-                                    MainStudioScreen()
+                                    MainStudioScreen(locale = locale, dark = darkMode)
                                 }
                             }
                         }
