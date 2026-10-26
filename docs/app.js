@@ -347,9 +347,18 @@ let deferredPrompt = null;
 const isStandalone = () =>
   window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 
-const isIos = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
+function isIos() {
+  return (
+    /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+    // iPadOS 13+ masquerades as a desktop Mac UA; it is still installable
+    // through Safari's Share → "Add to Home Screen".
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  );
+}
 
 function installEligible() {
+  // Only when opened in a BROWSER. Once the app is installed (standalone /
+  // iOS home-screen) the rectangle disappears for good.
   if (isStandalone()) return false;
   if (localStorage.getItem(INSTALL_DISMISS_KEY) === '1') return false;
   return Boolean(deferredPrompt) || isIos();
@@ -357,7 +366,9 @@ function installEligible() {
 
 function refreshInstallBanners() {
   const showBanner = installEligible();
-  ['installLogin', 'installHome'].forEach((id) => (showBanner ? show($(id)) : hide($(id))));
+  ['installLogin', 'installCreate', 'installHome'].forEach((id) =>
+    showBanner ? show($(id)) : hide($(id)),
+  );
 }
 
 async function triggerInstall() {
@@ -389,6 +400,14 @@ window.addEventListener('appinstalled', () => {
   toast(locale === 'ar' ? 'تم تثبيت التطبيق' : 'App installed', '📲');
 });
 
+// Keep the banners honest if the display mode changes while the tab is still
+// open (the user installed and came back — the rectangle must disappear).
+try {
+  window.matchMedia('(display-mode: standalone)').addEventListener('change', refreshInstallBanners);
+} catch (e) {
+  /* older Safari without the change event — nothing to do */
+}
+
 /* ------------------------------------------------------------------ */
 /* Views                                                              */
 /* ------------------------------------------------------------------ */
@@ -397,12 +416,14 @@ function showLogin() {
   hide($('viewHome'));
   hide($('viewCreate'));
   show($('viewLogin'));
+  refreshInstallBanners();
 }
 
 function showCreate() {
   hide($('viewLogin'));
   hide($('viewHome'));
   show($('viewCreate'));
+  refreshInstallBanners();
 }
 
 function showHome() {
