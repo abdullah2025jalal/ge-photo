@@ -108,6 +108,9 @@ const I18N = {
     copies: 'عدد النسخ المطلوبة',
     copiesLabel: 'النسخ:',
     delete: 'حذف',
+    editItemTitle: 'تعديل العنصر',
+    saveEdit: 'حفظ التعديلات',
+    invalidDimensions: 'تحقق من القيم: الأبعاد ١ سم أو أكثر وعدد النسخ ١ أو أكثر',
     photoChip: 'صورة عادية',
     docChip: 'مستند / هوية',
     photoName: 'صورة',
@@ -191,6 +194,9 @@ const I18N = {
     copies: 'Number of copies',
     copiesLabel: 'Copies:',
     delete: 'Delete',
+    editItemTitle: 'Edit item',
+    saveEdit: 'Save changes',
+    invalidDimensions: 'Check the values: dimensions 1 cm or more and copies 1 or more',
     photoChip: 'Photo',
     docChip: 'Document / ID',
     photoName: 'Photo',
@@ -708,17 +714,23 @@ document.querySelectorAll('[data-close-sheets]').forEach((btn) =>
   btn.addEventListener('click', () => {
     hide($('chooseSheet'));
     hide($('docSheet'));
+    hide($('editSheet'));
     hide($('installHelp'));
   }),
 );
 
 $('btnOpenAdd').addEventListener('click', () => show($('chooseSheet')));
 
+// "Add another item" under the items list opens the same chooser. This
+// button existed but never had a listener, so tapping it did nothing and
+// users could not add more than one item.
+$('btnAddMore').addEventListener('click', () => show($('chooseSheet')));
+
 // Back button beside the home badge: returns ONE step in the app — closes
 // any open sheet first, otherwise returns from the paper-preview tab to
 // the items tab. No-op when there is nothing to go back to.
 $('btnBackStep').addEventListener('click', () => {
-  const openSheet = [$('chooseSheet'), $('docSheet'), $('contactSheet')].find(
+  const openSheet = [$('chooseSheet'), $('docSheet'), $('editSheet'), $('contactSheet')].find(
     (el) => !el.classList.contains('hidden')
   );
   if (openSheet) { hide(openSheet); return; }
@@ -848,7 +860,10 @@ function renderItems() {
           <span class="chip ${isDoc ? 'doc' : 'photo'}">${isDoc ? t('docChip') : t('photoChip')}</span>
           <b style="font-size:14px">${item.name}</b>
         </div>
-        <button class="danger" data-delete="${index}">🗑️ ${t('delete')}</button>
+        <div class="cardbtns">
+          <button class="iconbtn" data-edit="${index}" type="button" aria-label="${t('editItemTitle')}" title="${t('editItemTitle')}"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 0 0 0-1.41l-2.34-2.34a.996.996 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></button>
+          <button class="iconbtn alarm" data-delete="${index}" type="button" aria-label="${t('delete')}" title="${t('delete')}"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></button>
+        </div>
       </div>
       <div class="row" style="margin-top:12px">
         <div class="thumb"><img src="${item.bitmap.src}" alt=""></div>
@@ -881,6 +896,9 @@ function renderItems() {
       renderPapers();
     }),
   );
+  list.querySelectorAll('[data-edit]').forEach((btn) =>
+    btn.addEventListener('click', () => openEditSheet(Number(btn.getAttribute('data-edit')))),
+  );
   list.querySelectorAll('[data-step]').forEach((btn) =>
     btn.addEventListener('click', () => {
       const [index, delta] = btn.getAttribute('data-step').split(':');
@@ -891,6 +909,56 @@ function renderItems() {
     }),
   );
 }
+
+/* ----------------------------- edit sheet ---------------------------- */
+
+// Opens the ✏️ (pencil) sheet for one item so its dimensions, copies and —
+// for documents — the duplex mode can be changed after it was added.
+let editIndex = -1;
+
+function openEditSheet(index) {
+  const item = items[index];
+  if (!item) return;
+  editIndex = index;
+  $('editW').value = item.widthCm;
+  $('editH').value = item.heightCm;
+  $('editCopies').value = item.copies;
+  const isDoc = item.type === 'DOCUMENT';
+  const wrap = $('editDuplexWrap');
+  if (isDoc) {
+    show(wrap);
+    const want = item.duplexMode === 'BACK_SIDE' ? 'BACK_SIDE' : 'SAME_PAGE';
+    const radio = document.querySelector(`input[name="editDuplex"][value="${want}"]`);
+    if (radio) radio.checked = true;
+  } else {
+    hide(wrap);
+  }
+  show($('editSheet'));
+}
+
+$('btnSaveEdits').addEventListener('click', () => {
+  const item = items[editIndex];
+  if (!item) { hide($('editSheet')); return; }
+  const w = parseFloat($('editW').value);
+  const h = parseFloat($('editH').value);
+  const copies = parseInt($('editCopies').value, 10);
+  if (!(w >= 1) || !(h >= 1) || !(copies >= 1)) {
+    toast(t('errorPrefix') + t('invalidDimensions'), '⚠️');
+    return;
+  }
+  item.widthCm = w;
+  item.heightCm = h;
+  item.copies = copies;
+  if (item.type === 'DOCUMENT') {
+    const checked = document.querySelector('input[name="editDuplex"]:checked');
+    if (checked) item.duplexMode = checked.value;
+    // The document card shows its dimensions inside the generated name.
+    item.name = `${t('docName')} ${w}×${h} cm`;
+  }
+  hide($('editSheet'));
+  renderItems();
+  renderPapers();
+});
 
 /* ------------------------- A4 layout engine ------------------------ */
 
