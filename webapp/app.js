@@ -121,6 +121,7 @@ const I18N = {
     margins: 'هوامش 0.6 سم | مسافة 1 ملم | ورق مقوى 300 DPI',
     exportShare: '📲 مشاركة ملف Word (.docx)',
     exportDownload: '📥 تنزيل Word (.docx)',
+    shareDocxText: 'ملف Word (.docx) لشبكة الصور على A4 جاهز للطباعة — من PhotoMagic',
     saveImages: '💾 حفظ صور (300 DPI)',
     addPhotoFirst: 'يرجى اختيار صورة الوجه الأمامي للمستند',
     addItemsFirst: 'أضف عناصر أولاً',
@@ -203,6 +204,7 @@ const I18N = {
     margins: 'Margins 0.6 cm | 1 mm spacing | 300 DPI photo paper',
     exportShare: '📲 Share Word file (.docx)',
     exportDownload: '📥 Download Word (.docx)',
+    shareDocxText: 'An A4 photo-grid Word (.docx) file ready for printing — by PhotoMagic',
     saveImages: '💾 Save images (300 DPI)',
     addPhotoFirst: 'Please pick the document front face image',
     addItemsFirst: 'Add items first',
@@ -321,6 +323,8 @@ function applyLocale(next) {
   if (items.length) {
     renderItems();
     renderPapers();
+    // Refresh the pre-built Word file for the current layout too.
+    warmDocx();
   }
 }
 
@@ -821,6 +825,10 @@ function renderItems() {
   const addMore = $('btnAddMore');
   if (addMore) addMore.classList.toggle('hidden', items.length === 0);
 
+  // The pre-built Word file is tied to this exact layout: any change to
+  // the items invalidates it (it is rebuilt on tap / at warm-up).
+  docxCache = null;
+
   if (items.length === 0) {
     hide(list);
     show(empty);
@@ -1145,6 +1153,82 @@ function downloadBlob(blob, name) {
   }, 8000);
 }
 
+/* --------------- native Word share (the OS share UI) ---------------- *
+ * Goal per platform:
+ *   • iOS / iPadOS Safari     → the system share SHEET with the real file.
+ *   • Android (Chrome/WV)     → the system share SHEET with the real file.
+ *   • Windows 10+ Chrome/Edge → the OS share panel with the real file.
+ *   • Anything else (Firefox, older iOS,…) → the real .docx is saved
+ *     through the browser download, landing on the device ready to be
+ *     shared with any app.
+ * The .docx is PRE-BUILT (warm cache) as soon as the layout is final, so a
+ * tap hands the file to the OS within the same user gesture — required on
+ * iPhone/iPad, where awaiting a long build can expire the activation and
+ * make navigator.share fail. Web Share needs a secure context, which the
+ * published site (https) always has.
+ * -------------------------------------------------------------------- */
+
+let docxCache = null;   // { key, blob, name, file } for the CURRENT layout
+let warmingDocx = false;
+
+/** Stable fingerprint of the current page layout (what the file contains). */
+function planKey(plan) {
+  return `v1_${plan.totalPages}_${plan.placed
+    .map((i) => `${i.item.id}_${i.back ? 'b' : 'f'}_${i.page}_${Math.round(i.x * 1000)}_${Math.round(i.y * 1000)}`)
+    .join('-')}`;
+}
+
+/** Builds (or reuses) the .docx and caches it for this exact layout. */
+async function getDocxPayload() {
+  let key = planKey(computePlan());
+  let payload = await buildDocx();
+  // If the items changed while building, rebuild once so the file matches
+  // the layout that is actually on screen.
+  if (planKey(computePlan()) !== key) {
+    key = planKey(computePlan());
+    payload = await buildDocx();
+  }
+  docxCache = { key, ...payload };
+  return docxCache;
+}
+
+/** Fire-and-forget warm-up so the share button is instant afterwards. */
+function warmDocx() {
+  if (items.length === 0 || warmingDocx) return;
+  if (docxCache && docxCache.key === planKey(computePlan())) return;
+  warmingDocx = true;
+  getDocxPayload()
+    .catch(() => {})
+    .finally(() => {
+      warmingDocx = false;
+    });
+}
+
+/** Hands the real .docx file to the native OS share UI.
+ *  Returns 'shared' | 'cancelled' | 'unsupported' | 'failed'. */
+async function tryNativeFileShare(file) {
+  if (!navigator.share || !navigator.canShare) return 'unsupported';
+  let canFiles = false;
+  try {
+    canFiles = navigator.canShare({ files: [file] });
+  } catch (e) {
+    canFiles = false;
+  }
+  if (!canFiles) return 'unsupported';
+  try {
+    await navigator.share({
+      files: [file],
+      title: 'PhotoMagic',
+      text: t('shareDocxText'),
+    });
+    return 'shared';
+  } catch (error) {
+    // The user closed the system sheet themselves — that is NOT an error.
+    if (error && error.name === 'AbortError') return 'cancelled';
+    return 'failed';
+  }
+}
+
 async function shareDocx() {
   if (items.length === 0) {
     toast(t('addItemsFirst'), '⚠️');
@@ -1152,21 +1236,33 @@ async function shareDocx() {
   }
   const button = $('btnShareDocx');
   const original = button.textContent;
-  button.disabled = true;
-  button.textContent = t('preparing');
+  const keyNow = planKey(computePlan());
+  const warm = docxCache && docxCache.key === keyNow;
+
+  // Busy state only while the file still needs building — when it is
+  // pre-built, the OS sheet opens within the very same tap.
+  if (!warm) {
+    button.disabled = true;
+    button.textContent = t('preparing');
+  }
+
   try {
-    const { blob, name, file } = await buildDocx();
-    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-      try {
-        await navigator.share({ files: [file] });
-        toast(t('shared'), '📲');
-      } catch (error) {
-        if (error && error.name !== 'AbortError') downloadBlob(blob, name);
-      }
-    } else {
-      downloadBlob(blob, name);
-      toast(t('downloadFallback'), '📥');
+    const { blob, name, file } = warm ? docxCache : await getDocxPayload();
+    const outcome = await tryNativeFileShare(file);
+
+    if (outcome === 'shared') {
+      toast(t('shared'), '📲');
+      return;
     }
+    if (outcome === 'cancelled') {
+      return;
+    }
+    // 'unsupported' (Firefox / older iOS / no share API) or 'failed' (the
+    // activation ran out during an awaited build): deliver the REAL file
+    // through the browser download — it lands on the device where every
+    // OS lets the user attach it anywhere without any further setup.
+    downloadBlob(blob, name);
+    toast(t('downloadFallback'), '📥');
   } catch (error) {
     toast(t('errorPrefix') + error.message, '⚠️');
   } finally {
@@ -1212,6 +1308,9 @@ $('tabPapers').addEventListener('click', () => {
   hide($('paneItems'));
   show($('panePapers'));
   renderPapers();
+  // Pre-build the .docx in the background so the 📲 share button hands the
+  // real file to the OS sheet within the same tap (iOS-safe).
+  warmDocx();
 });
 
 /* ------------------------------------------------------------------ */
