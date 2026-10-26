@@ -637,7 +637,13 @@ async function attemptLogin() {
       failedAttempts = 0;
       localStorage.removeItem(PREF_LOCK_PREFIX + 'lock');
       passwordInput.value = '';
-      saveSession(result.account ? result.account.username : username.trim().toLowerCase());
+      // The account node's KEY is the identity (nodes do NOT store a
+      // separate "username" field). Saving the normalized typed name —
+      // exactly like the Android client. Reading account.username here was
+      // a bug: it is undefined, JSON.stringify silently dropped it, and the
+      // 30s monitor then fetched "/accounts/undefined.json" → the session
+      // was killed right after a successful login.
+      saveSession(username.trim().toLowerCase());
       showHome();
       startMonitor();
       break;
@@ -1254,7 +1260,15 @@ async function boot() {
       }
       clearSession();
     } catch (e) {
-      /* offline: fall through to the login screen */
+      // Offline (or transient error) right at boot: keep the saved session
+      // optimistically — the same behavior as the Android client — instead
+      // of kicking the user to the login screen. The 30s monitor keeps the
+      // session while offline and ends it only when the account is really
+      // gone / suspended / expired.
+      session = { username: saved.username };
+      showHome();
+      startMonitor();
+      return;
     }
   }
 
