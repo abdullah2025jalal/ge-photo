@@ -100,6 +100,7 @@ interface StudioStrings {
     val emptyTitle: String
     val emptyBody: String
     val emptyAdd: String
+    val addShort: String
     // ---------------------------------------------------------------- items
     val photoBadge: String
     val docBadge: String
@@ -185,6 +186,7 @@ object StudioStringsEn : StudioStrings {
     override val emptyBody: String =
         "You can add regular personal photos or documents (ID, license, card with front and back faces) to print them at maximum resolution on an A4 sheet without any overlap."
     override val emptyAdd: String = "Add photo or document"
+    override val addShort: String = "Add"
     override val photoBadge: String = "Photo"
     override val docBadge: String = "Document / ID"
     override val edit: String = "Edit"
@@ -266,6 +268,7 @@ object StudioStringsAr : StudioStrings {
     override val emptyBody: String =
         "يمكنك إضافة صور شخصية عادية أو مستندات (هوية، رخصة، بطاقة مع وجه أمامي وخلفي) لطباعتها بأعلى دقة على ورقة A4 دون أي تداخل."
     override val emptyAdd: String = "إضافة صورة أو مستند"
+    override val addShort: String = "إضافة"
     override val photoBadge: String = "صورة عادية"
     override val docBadge: String = "مستند / هوية"
     override val edit: String = "تعديل"

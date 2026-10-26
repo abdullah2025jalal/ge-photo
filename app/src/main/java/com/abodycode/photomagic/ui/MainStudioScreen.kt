@@ -309,7 +309,8 @@ fun MainStudioScreen(locale: String, dark: Boolean) {
     ) {
         // ABODY CODE hero: big CENTERED logo, with the working back button
         // beside it (fixed left edge, like the app badge / home in the top
-        // bar) and the centered "add photo" button right below the logo.
+        // bar). While the queue is empty, the message card right below is
+        // the add entry point, forming one centered tidy composition.
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
             Box(
                 modifier = Modifier
@@ -342,32 +343,19 @@ fun MainStudioScreen(locale: String, dark: Boolean) {
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Centered "add photo" button right below the big logo
-        Button(
-            onClick = { showAddTypeDialog = true },
-            colors = ButtonDefaults.buttonColors(containerColor = p.action),
-            shape = RoundedCornerShape(12.dp),
-            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 10.dp),
-            modifier = Modifier
-                .align(Alignment.CenterHorizontally)
-                .testTag("add_item_btn")
-        ) {
-            Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp)
+        // The message card with the ONLY add button hugs the logo while the
+        // queue is empty — logo + card form one centered, tidy composition.
+        if (printItems.isEmpty()) {
+            Spacer(modifier = Modifier.height(10.dp))
+            StudioEmptyStateCard(
+                strings = t,
+                palette = p,
+                onAddNew = { showAddTypeDialog = true },
             )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = t.addPhotoBtn,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Spacer(modifier = Modifier.height(14.dp))
+        } else {
+            Spacer(modifier = Modifier.height(8.dp))
         }
-
-        Spacer(modifier = Modifier.height(12.dp))
 
         // Navigation Tabs
         TabRow(
@@ -405,27 +393,31 @@ fun MainStudioScreen(locale: String, dark: Boolean) {
 
         // Tab Content
         if (activeTabIndex == 0) {
-            PhotosListTab(
-                strings = t,
-                palette = p,
-                items = printItems,
-                onAddNew = { showAddTypeDialog = true },
-                onUpdateItem = { updatedItem ->
-                    val idx = printItems.indexOfFirst { it.id == updatedItem.id }
-                    if (idx != -1) {
-                        printItems[idx] = updatedItem
+            // While the queue is empty, the hero message card above IS the
+            // items-tab content; the list only appears with actual items.
+            if (!printItems.isEmpty()) {
+                PhotosListTab(
+                    strings = t,
+                    palette = p,
+                    items = printItems,
+                    onAddNew = { showAddTypeDialog = true },
+                    onUpdateItem = { updatedItem ->
+                        val idx = printItems.indexOfFirst { it.id == updatedItem.id }
+                        if (idx != -1) {
+                            printItems[idx] = updatedItem
+                        }
+                    },
+                    onDeleteItem = { itemToDelete ->
+                        printItems.removeIf { it.id == itemToDelete.id }
+                    },
+                    onEditDimensions = { item ->
+                        itemToEditDimensions = item
+                    },
+                    onGoToPreview = {
+                        activeTabIndex = 1
                     }
-                },
-                onDeleteItem = { itemToDelete ->
-                    printItems.removeIf { it.id == itemToDelete.id }
-                },
-                onEditDimensions = { item ->
-                    itemToEditDimensions = item
-                },
-                onGoToPreview = {
-                    activeTabIndex = 1
-                }
-            )
+                )
+            }
         } else {
             A4WordMultiPageTab(
                 strings = t,
@@ -509,6 +501,65 @@ fun MainStudioScreen(locale: String, dark: Boolean) {
     }
 }
 
+/// Empty-state card of the studio: rendered right below the hero logo so
+/// the two form ONE centered tidy composition. Carries the only add
+/// button while the queue is empty.
+@Composable
+private fun StudioEmptyStateCard(
+    strings: StudioStrings,
+    palette: StudioPalette,
+    onAddNew: () -> Unit,
+) {
+    val t = strings
+    val p = palette
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = p.surface),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 22.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Icon(
+                imageVector = Icons.Default.PhotoLibrary,
+                contentDescription = null,
+                tint = p.accent,
+                modifier = Modifier.size(56.dp)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = t.emptyTitle,
+                color = p.text,
+                fontWeight = FontWeight.Bold,
+                fontSize = 17.sp,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = t.emptyBody,
+                color = p.textDim,
+                textAlign = TextAlign.Center,
+                fontSize = 12.sp,
+                lineHeight = 18.sp
+            )
+            Spacer(modifier = Modifier.height(18.dp))
+            Button(
+                onClick = onAddNew,
+                colors = ButtonDefaults.buttonColors(containerColor = p.action),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.testTag("add_item_btn")
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(t.emptyAdd)
+            }
+        }
+    }
+}
+
 @Composable
 fun PhotosListTab(
     strings: StudioStrings,
@@ -522,113 +573,86 @@ fun PhotosListTab(
 ) {
     val t = strings
     val p = palette
-    if (items.isEmpty()) {
-        Box(
-            modifier = Modifier.fillMaxSize().padding(24.dp),
-            contentAlignment = Alignment.Center
+
+    // The empty state (message card + the only add button) lives ABOVE the
+    // tabs, right under the hero logo; this view is composed only when
+    // actual items exist.
+    Column(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.weight(1f).padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = p.surface),
-                modifier = Modifier.fillMaxWidth().padding(16.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.PhotoLibrary,
-                        contentDescription = null,
-                        tint = p.accent,
-                        modifier = Modifier.size(56.dp)
-                    )
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Text(
-                        text = t.emptyTitle,
-                        color = p.text,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 17.sp
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = t.emptyBody,
-                        color = p.textDim,
-                        textAlign = TextAlign.Center,
-                        fontSize = 12.sp,
-                        lineHeight = 18.sp
-                    )
-                    Spacer(modifier = Modifier.height(20.dp))
-                    Button(
-                        onClick = onAddNew,
-                        colors = ButtonDefaults.buttonColors(containerColor = p.action),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(t.emptyAdd)
-                    }
-                }
+            itemsIndexed(items, key = { _, it -> it.id }) { index, item ->
+                ItemCard(
+                    strings = t,
+                    palette = p,
+                    item = item,
+                    index = index + 1,
+                    onUpdate = onUpdateItem,
+                    onDelete = { onDeleteItem(item) },
+                    onEditDimensions = { onEditDimensions(item) }
+                )
             }
         }
-    } else {
-        Column(modifier = Modifier.fillMaxSize()) {
-            LazyColumn(
-                modifier = Modifier.weight(1f).padding(horizontal = 14.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+
+        // Bottom summary bar
+        Surface(
+            color = p.surface,
+            tonalElevation = 6.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                itemsIndexed(items, key = { _, it -> it.id }) { index, item ->
-                    ItemCard(
-                        strings = t,
-                        palette = p,
-                        item = item,
-                        index = index + 1,
-                        onUpdate = onUpdateItem,
-                        onDelete = { onDeleteItem(item) },
-                        onEditDimensions = { onEditDimensions(item) }
+                // Adding stays reachable while items exist (the empty-state
+                // card under the logo disappears once items are added).
+                IconButton(
+                    onClick = onAddNew,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(p.frame, RoundedCornerShape(9.dp))
+                        .testTag("add_more_btn")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = t.addShort,
+                        tint = p.accent,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
-            }
 
-            // Bottom summary bar
-            Surface(
-                color = p.surface,
-                tonalElevation = 6.dp,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column {
+                    val photosCount = items.filter { it.itemType == ItemType.PHOTO }.sumOf { it.copiesCount }
+                    val docsCount = items.filter { it.itemType == ItemType.DOCUMENT }.sumOf { it.copiesCount }
+                    Text(
+                        text = t.total(photosCount, docsCount),
+                        color = p.text,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                    Text(
+                        text = t.specsShort,
+                        color = p.accent,
+                        fontSize = 11.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                Button(
+                    onClick = onGoToPreview,
+                    colors = ButtonDefaults.buttonColors(containerColor = p.blue),
+                    shape = RoundedCornerShape(10.dp)
                 ) {
-                    Column {
-                        val photosCount = items.filter { it.itemType == ItemType.PHOTO }.sumOf { it.copiesCount }
-                        val docsCount = items.filter { it.itemType == ItemType.DOCUMENT }.sumOf { it.copiesCount }
-                        Text(
-                            text = t.total(photosCount, docsCount),
-                            color = p.text,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
-                        )
-                        Text(
-                            text = t.specsShort,
-                            color = p.accent,
-                            fontSize = 11.sp
-                        )
-                    }
-
-                    Button(
-                        onClick = onGoToPreview,
-                        colors = ButtonDefaults.buttonColors(containerColor = p.blue),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Text(t.viewPaper)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                    Text(t.viewPaper)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
                 }
             }
         }
@@ -1514,10 +1538,14 @@ fun A4WordMultiPageTab(
                                     contentDescription = pageLabel,
                                     modifier = Modifier.fillMaxSize()
                                 )
-                            } else {
+                            } else if (isRendering) {
                                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                     CircularProgressIndicator(color = p.accent, modifier = Modifier.size(32.dp))
                                 }
+                            } else {
+                                // Nothing placed yet: just the clean sheet
+                                // (no infinite spinner on an empty plan).
+                                Spacer(modifier = Modifier.fillMaxSize())
                             }
                         }
                     }

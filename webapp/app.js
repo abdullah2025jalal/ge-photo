@@ -703,9 +703,6 @@ document.querySelectorAll('[data-close-sheets]').forEach((btn) =>
 );
 
 $('btnOpenAdd').addEventListener('click', () => show($('chooseSheet')));
-// The centered "add photo" button under the big home logo opens the SAME
-// add-type chooser as the empty-state button.
-$('btnAddHome').addEventListener('click', () => show($('chooseSheet')));
 
 // Back button beside the home badge: returns ONE step in the app — closes
 // any open sheet first, otherwise returns from the paper-preview tab to
@@ -813,6 +810,10 @@ function renderItems() {
   $('countItems').textContent = String(items.length);
   const list = $('itemsList');
   const empty = $('itemsEmpty');
+  // The compact "+" add button only shows when real items exist (the hero
+  // empty-box disappears then, and there must stay ONE reachable add).
+  const addMore = $('btnAddMore');
+  if (addMore) addMore.classList.toggle('hidden', items.length === 0);
 
   if (items.length === 0) {
     hide(list);

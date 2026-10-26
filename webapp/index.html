@@ -97,10 +97,9 @@
        with the centered "add photo" button right below it. */
     .brand.home { max-width: 330px; margin: 10px auto 0; }
     h1.title { font-size: 26px; font-weight: 800; text-align: center; margin: 6px 0 4px; letter-spacing: .3px; }
-    .tagline { text-align: center; color: var(--dim); font-size: 14px; margin: 0 0 14px; }
-    #btnAddHome {
-      width: min(100%, 300px); margin: 4px auto 0; font-size: 15px; padding: 14px;
-    }
+    .tagline { text-align: center; color: var(--dim); font-size: 14px; margin: 0 0 10px; }
+    /* The message box sits snugly under the big logo (one tidy hero). */
+    #itemsEmpty { max-width: 560px; width: calc(100% - 16px); margin: 4px auto 20px; padding: 26px 18px 22px; }
 
     /* ---------- inputs ---------- */
     .field {
@@ -358,8 +357,14 @@
     <h1 class="title" data-i18n="appTitle">PhotoMagic</h1>
     <p class="tagline" data-i18n="taglineShort">استوديو طباعة شبكة الصور A4 و المستندات</p>
 
-    <!-- Centered "add photo" button directly below the big logo -->
-    <button id="btnAddHome" class="primary" type="button"><span>+</span><span data-i18n="addPhoto">إضافة صورة</span></button>
+    <!-- Empty-state box right below the logo: logo + message + the only
+         add button form ONE tidy centered hero composition. -->
+    <div id="itemsEmpty" class="card empty">
+      <div class="ico">🖼️</div>
+      <h2 data-i18n="emptyTitle">لا توجد عناصر مضافة بعد</h2>
+      <p data-i18n="emptyBody">أضف صوراً شخصية أو مستندات لطباعتها على ورقة A4.</p>
+      <button class="primary" type="button" id="btnOpenAdd" style="max-width:260px;margin:0 auto"><span>+</span><span data-i18n="addItem">إضافة عنصر</span></button>
+    </div>
 
     <div id="installHome" class="install hidden">
       <img src="icon-192.png" alt="PhotoMagic">
@@ -377,12 +382,9 @@
     </div>
 
     <section id="paneItems">
-      <div id="itemsEmpty" class="card empty">
-        <div class="ico">🖼️</div>
-        <h2 data-i18n="emptyTitle">لا توجد عناصر مضافة بعد</h2>
-        <p data-i18n="emptyBody">أضف صوراً شخصية أو مستندات لطباعتها على ورقة A4.</p>
-        <button class="primary" type="button" id="btnOpenAdd" style="max-width:260px;margin:0 auto"><span>+</span><span data-i18n="addItem">إضافة عنصر</span></button>
-      </div>
+      <!-- Compact add button while items exist (the hero empty-box is gone
+           once real items are added) — keeps the app with ONE add button. -->
+      <button id="btnAddMore" class="primary hidden" type="button" style="max-width:260px;margin:0 auto 12px"><span>+</span><span data-i18n="addItem">إضافة عنصر</span></button>
       <div id="itemsList" class="hidden" style="display:flex;flex-direction:column;gap:10px"></div>
     </section>
 
