@@ -1,1126 +1,476 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="ar" dir="rtl" data-theme="light">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <meta http-equiv="Pragma" content="no-cache">
-  <meta http-equiv="Expires" content="0">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>PhotoMagic - استوديو طباعة شبكة الصور A4</title>
-  <meta name="description" content="استوديو طباعة شبكة الصور والمستندات على ورقة A4 لورق الصور المقوى وملفات Word">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>PhotoMagic</title>
+  <meta name="description" content="PhotoMagic — استوديو طباعة شبكة الصور A4">
+  <meta name="theme-color" content="#0087A3">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" href="icon-192.png">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <meta name="theme-color" content="#1E293B">
-  
-  <!-- Tailwind CSS & JSZip for client-side Word DOCX generation -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="PhotoMagic">
 
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
-    * { font-family: 'Cairo', sans-serif; }
-    
-    /* Scrollbar styling */
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: #0F172A; }
-    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    :root {
+      --bg: #F6F8FC;
+      --surface: #FFFFFF;
+      --frame: #C3CAD8;
+      --text: #101423;
+      --dim: #5A6478;
+      --glass: rgba(100, 111, 135, 0.08);
+      --accent: #0087A3;
+      --accent-ink: #FFFFFF;
+      --good: #00A34A;
+      --alarm: #D21243;
+      --amber: #B26B00;
+      --shadow: 0 10px 30px rgba(16, 20, 35, 0.10);
+    }
+    html[data-theme="dark"] {
+      --bg: #12131C;
+      --surface: #1A1B26;
+      --frame: #2A2C3D;
+      --text: #E8F0FF;
+      --dim: #8A93AC;
+      --glass: rgba(30, 34, 51, 0.35);
+      --accent: #00F2FE;
+      --accent-ink: #04222A;
+      --good: #00FF87;
+      --alarm: #FF2A55;
+      --amber: #FFC24B;
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", "Tahoma", "Noto Naskh Arabic", system-ui, sans-serif;
+      min-height: 100vh;
+      transition: background .25s ease, color .25s ease;
+    }
+    .hidden { display: none !important; }
+    .page {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 16px 24px 48px;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    .grow { flex: 1; }
 
-    /* Print styles for A4 sheet */
-    @media print {
-      body * { visibility: hidden; }
-      #printArea, #printArea * { visibility: visible; }
-      #printArea { position: absolute; left: 0; top: 0; width: 100%; }
-      .no-print { display: none !important; }
+    /* ---------- top bar ----------
+       Fixed visual layout (like the Android app): app badge + language +
+       theme on the LEFT, "Contact me" on the RIGHT — independent of the
+       active locale's text direction. */
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; direction: ltr; }
+    .group { display: flex; align-items: center; gap: 8px; }
+    .seg {
+      display: inline-flex; border: 1px solid var(--frame); border-radius: 9px; overflow: hidden; background: var(--surface);
+    }
+    .seg button {
+      border: 0; background: transparent; color: var(--dim); font-weight: 700; font-size: 13px;
+      padding: 7px 12px; cursor: pointer; font-family: inherit;
+    }
+    .seg button.on { background: var(--accent); color: var(--accent-ink); }
+    .icon-btn {
+      width: 38px; height: 34px; border: 1px solid var(--frame); border-radius: 9px; background: var(--surface);
+      color: var(--accent); font-size: 17px; cursor: pointer; line-height: 1;
+    }
+    .app-badge {
+      width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--frame); object-fit: cover; background: var(--surface);
+    }
+    .outline {
+      border: 1.4px solid var(--accent); background: transparent; color: var(--accent);
+      border-radius: 9px; padding: 9px 14px; font-weight: 700; font-size: 14px; cursor: pointer; font-family: inherit;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .outline.sm { padding: 7px 11px; font-size: 13px; }
+
+    /* ---------- brand ---------- */
+    .brand { width: 100%; max-width: 420px; margin: 22px auto 10px; display: block; object-fit: contain; }
+    .brand.small { max-width: 260px; margin-bottom: 6px; }
+    /* Home hero: the SAME big centered ABODY CODE logo as the login screen,
+       with the centered "add photo" button right below it. */
+    .brand.home { max-width: 330px; margin: 10px auto 0; }
+    h1.title { font-size: 26px; font-weight: 800; text-align: center; margin: 6px 0 4px; letter-spacing: .3px; }
+    .tagline { text-align: center; color: var(--dim); font-size: 14px; margin: 0 0 10px; }
+    /* The message box sits snugly under the big logo (one tidy hero). */
+    #itemsEmpty { max-width: 560px; width: calc(100% - 16px); margin: 4px auto 20px; padding: 26px 18px 22px; }
+
+    /* ---------- inputs ---------- */
+    .field {
+      display: flex; align-items: center; gap: 10px; background: var(--surface);
+      border: 1px solid var(--frame); border-radius: 10px; padding: 0 12px; margin-bottom: 14px;
+    }
+    .field:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--glass); }
+    .field .ico { font-size: 16px; opacity: .75; }
+    .field input {
+      flex: 1; border: 0; outline: 0; background: transparent; color: var(--text);
+      font-size: 16px; padding: 15px 0; font-family: inherit; min-width: 0;
+    }
+    .field input[dir="ltr"] { text-align: left; }
+    .field .eye { border: 0; background: transparent; color: var(--dim); font-size: 17px; cursor: pointer; padding: 6px; }
+
+    .error {
+      background: color-mix(in srgb, var(--alarm) 12%, transparent);
+      border: 1px solid color-mix(in srgb, var(--alarm) 55%, transparent);
+      color: var(--alarm); border-radius: 10px; padding: 12px 14px; font-size: 14px;
+      font-weight: 700; margin-bottom: 14px; text-align: center;
+    }
+    .primary {
+      width: 100%; border: 0; border-radius: 10px; background: var(--accent); color: var(--accent-ink);
+      font-size: 16px; font-weight: 800; letter-spacing: 1px; padding: 16px; cursor: pointer; font-family: inherit;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+    }
+    .primary[disabled] { opacity: .65; cursor: default; }
+    .link {
+      background: transparent; border: 0; color: var(--accent); font-weight: 700; font-size: 15px;
+      margin: 18px auto 0; cursor: pointer; font-family: inherit; display: block;
+    }
+    .spinner {
+      width: 18px; height: 18px; border: 2.5px solid color-mix(in srgb, var(--accent-ink) 35%, transparent);
+      border-top-color: var(--accent-ink); border-radius: 50%; animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ---------- create account ---------- */
+    .back {
+      align-self: flex-start; border: 0; background: transparent; color: var(--text);
+      font-size: 22px; cursor: pointer; padding: 4px 6px; font-family: inherit;
+    }
+    .glass-card {
+      background: var(--glass); border: 1px solid var(--frame); border-radius: 14px;
+      padding: 18px; text-align: center; font-size: 16px; line-height: 1.7; font-weight: 600;
+      color: var(--text);
+    }
+    .channel {
+      display: flex; align-items: center; gap: 14px; width: 100%; text-align: start;
+      background: transparent; border-radius: 10px; padding: 14px 16px; margin-bottom: 10px;
+      font-size: 16px; font-weight: 700; cursor: pointer; font-family: inherit;
+    }
+    .channel .chev { margin-inline-start: auto; opacity: .6; }
+    .ch-wa { color: #25D366; border: 1.4px solid rgba(37, 211, 102, .6); }
+    .ch-tg { color: #229ED9; border: 1.4px solid rgba(34, 158, 217, .6); }
+    .ch-em { color: #EA4335; border: 1.4px solid rgba(234, 67, 53, .6); }
+
+    /* ---------- install banner (rectangle) ---------- */
+    .install {
+      display: flex; align-items: center; gap: 12px; background: var(--surface);
+      border: 1px solid var(--accent); border-radius: 12px; padding: 12px; box-shadow: var(--shadow);
+      margin: 12px 0 16px;
+    }
+    .install img { width: 46px; height: 46px; border-radius: 10px; border: 1px solid var(--frame); }
+    .install .txt { flex: 1; min-width: 0; }
+    .install .txt b { color: var(--accent); font-size: 15px; display: block; }
+    .install .txt span { color: var(--dim); font-size: 12px; }
+    .install .ok {
+      border: 1.4px solid var(--accent); background: transparent; color: var(--accent);
+      border-radius: 9px; padding: 8px 12px; font-weight: 700; font-size: 13px; cursor: pointer; font-family: inherit;
+    }
+    .install .x { border: 0; background: transparent; color: var(--dim); font-size: 16px; cursor: pointer; padding: 4px; }
+
+    /* ---------- sign out row ---------- */
+    .signout-row { display: flex; justify-content: flex-end; }
+    .signout {
+      border: 0; background: transparent; color: var(--dim); font-size: 12px; font-weight: 700;
+      cursor: pointer; padding: 6px 8px; font-family: inherit;
+    }
+
+    /* ---------- studio ---------- */
+    .tabs { display: flex; gap: 6px; background: var(--glass); border: 1px solid var(--frame); border-radius: 12px; padding: 4px; margin: 18px 0 14px; }
+    .tabs button {
+      flex: 1; border: 0; background: transparent; color: var(--dim); font-weight: 700; font-size: 14px;
+      padding: 11px 8px; border-radius: 9px; cursor: pointer; font-family: inherit;
+    }
+    .tabs button.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+    .card {
+      background: var(--surface); border: 1px solid var(--frame); border-radius: 14px; padding: 14px;
+      box-shadow: var(--shadow);
+    }
+    .empty { text-align: center; padding: 40px 18px; }
+    .empty .ico { font-size: 34px; margin-bottom: 10px; }
+    .empty h2 { font-size: 18px; margin: 0 0 6px; }
+    .empty p { color: var(--dim); font-size: 14px; margin: 0 auto 16px; max-width: 420px; line-height: 1.6; }
+    .row { display: flex; align-items: center; gap: 12px; }
+    .thumb { width: 62px; height: 46px; background: #000; border-radius: 8px; overflow: hidden; flex: none; border: 1px solid var(--frame); }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .chip { font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 6px; }
+    .chip.photo { background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); }
+    .chip.doc { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+    .metaline { color: var(--dim); font-size: 12px; margin-top: 3px; }
+    .stepper { display: flex; align-items: center; gap: 8px; background: var(--glass); border: 1px solid var(--frame); border-radius: 10px; padding: 6px 10px; }
+    .stepper button { border: 0; background: transparent; color: var(--accent); font-size: 17px; font-weight: 800; cursor: pointer; font-family: inherit; }
+    .stepper b { color: var(--accent); font-size: 14px; min-width: 18px; text-align: center; }
+    .danger {
+      border: 1px solid color-mix(in srgb, var(--alarm) 60%, transparent); background: transparent;
+      color: var(--alarm); border-radius: 9px; padding: 8px 10px; font-size: 12px; font-weight: 700;
+      cursor: pointer; font-family: inherit;
+    }
+    .sheet-backdrop {
+      position: fixed; inset: 0; background: rgba(6, 8, 14, .66); z-index: 80;
+      display: flex; align-items: flex-end; justify-content: center; padding: 0;
+    }
+    .sheet-backdrop.center { align-items: center; padding: 16px; }
+    .sheet {
+      background: var(--surface); border: 1px solid var(--frame); border-radius: 20px 20px 0 0;
+      width: 100%; max-width: 720px; padding: 20px; max-height: 92vh; overflow-y: auto;
+    }
+    .sheet-backdrop.center .sheet { border-radius: 16px; max-width: 520px; }
+    .sheet h3 { text-align: center; margin: 0 0 16px; font-size: 18px; }
+    .sheet .sheet-sub { color: var(--dim); font-size: 12px; text-align: center; margin: -10px 0 14px; }
+    .sheet .heading { font-weight: 800; font-size: 13px; margin: 4px 0 8px; color: var(--dim); }
+    .sheet label.opt {
+      display: flex; align-items: center; gap: 12px; border: 1px solid var(--frame); border-radius: 12px;
+      padding: 14px; margin-bottom: 10px; cursor: pointer; background: var(--glass);
+    }
+    .sheet label.opt .big { font-size: 26px; }
+    .sheet label.opt b { display: block; font-size: 14px; }
+    .sheet label.opt span { font-size: 12px; color: var(--dim); }
+    .sheet input[type="number"], .sheet input[type="text"] {
+      width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--frame);
+      border-radius: 9px; padding: 11px; font-size: 14px; font-family: inherit;
+    }
+    .sheet .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+    .sheet .previews { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+    .pick {
+      position: relative; height: 106px; border: 2px dashed var(--frame); border-radius: 12px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; cursor: pointer; overflow: hidden; background: var(--bg);
+    }
+    .pick img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .pick b { font-size: 12px; }
+    .pick span { font-size: 20px; }
+    .actions { display: flex; gap: 10px; margin-top: 4px; }
+    .actions .primary { flex: 1; }
+    .actions .ghost { border: 1px solid var(--frame); background: transparent; color: var(--dim); border-radius: 10px; padding: 14px 16px; font-weight: 700; cursor: pointer; font-family: inherit; }
+    .papers { display: flex; flex-direction: column; gap: 18px; }
+    .paper-head { display: flex; align-items: center; justify-content: space-between; font-size: 12px; margin-bottom: 10px; }
+    .paper-head b { background: var(--glass); border: 1px solid var(--frame); padding: 5px 10px; border-radius: 8px; }
+    .paper-head button { border: 0; background: transparent; color: var(--accent); font-weight: 700; font-size: 12px; cursor: pointer; font-family: inherit; }
+    canvas.page-canvas { width: 100%; display: block; border-radius: 6px; background: #fff; }
+    .footer-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .footer-actions button {
+      flex: 1 1 160px; border-radius: 10px; padding: 14px; font-size: 14px; font-weight: 700; cursor: pointer;
+      font-family: inherit; border: 1px solid var(--frame); background: var(--surface); color: var(--text);
+    }
+    .footer-actions button.share { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+
+    /* ---------- toast ---------- */
+    #toast {
+      position: fixed; inset-inline: 16px; bottom: 24px; z-index: 120; margin: 0 auto; max-width: 460px;
+      background: var(--text); color: var(--bg); border-radius: 12px; padding: 14px 16px; font-size: 14px;
+      font-weight: 700; display: flex; align-items: center; gap: 10px; box-shadow: var(--shadow);
     }
   </style>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col antialiased select-none">
+<body>
 
-  <!-- ==================== PWA INSTALL RECTANGLE PROMPT (مستطيل تثبيت التطبيق) ==================== -->
-  <div id="installBanner" class="fixed inset-x-4 top-4 z-50 bg-gradient-to-r from-blue-700 via-sky-600 to-indigo-700 text-white rounded-2xl shadow-2xl p-4 border border-sky-400/30 flex items-center justify-between gap-4 animate-bounce-once">
-    <div class="flex items-center gap-3">
-      <img src="icon-192.png" alt="PhotoMagic Icon" class="w-12 h-12 rounded-xl shadow-md border border-white/20">
-      <div>
-        <h3 class="font-bold text-sm sm:text-base leading-tight">تثبيت تطبيق PhotoMagic على جهازك</h3>
-        <p class="text-xs text-sky-100">تثبيت فوري كأيقونة على الشاشة الرئيسية بدون إنترنت</p>
+  <!-- ============================================================ LOGIN -->
+  <main id="viewLogin" class="page">
+    <div class="topbar">
+      <div class="group">
+        <img class="app-badge" src="icon-192.png" alt="PhotoMagic">
+        <div class="seg" role="group">
+          <button id="langEn" type="button">EN</button>
+          <button id="langAr" type="button">ع</button>
+        </div>
+        <button id="themeBtnLogin" class="icon-btn" type="button" aria-label="theme">🌙</button>
       </div>
-    </div>
-    <div class="flex items-center gap-2">
-      <button id="btnInstallApp" class="bg-white text-blue-800 font-bold px-4 py-2 rounded-xl text-xs sm:text-sm hover:bg-sky-50 transition shadow-lg">
-        تثبيت الآن
-      </button>
-      <button id="btnCloseInstall" class="text-white/80 hover:text-white p-1 rounded-lg">
-        ✕
+      <button class="outline sm" type="button" data-open-contact>
+        <span>🎧</span><span data-i18n="contactMe">تواصل معي</span>
       </button>
     </div>
-  </div>
 
-  <!-- Toast Notification -->
-  <div id="toastNotification" class="fixed bottom-24 inset-x-4 max-w-md mx-auto z-50 bg-slate-800 text-white border border-sky-500/50 rounded-2xl p-4 shadow-2xl flex items-center gap-3 hidden transition-all duration-300">
-    <div id="toastIcon" class="text-2xl">✅</div>
-    <div class="flex-1 text-xs sm:text-sm font-semibold" id="toastMessage"></div>
-    <button onclick="document.getElementById('toastNotification').classList.add('hidden')" class="text-slate-400 hover:text-white text-sm">✕</button>
-  </div>
+    <img class="brand" src="assets/branding/app_logo.png" alt="ABODY CODE">
+    <h1 class="title" data-i18n="appTitle">PhotoMagic</h1>
+    <p class="tagline" data-i18n="tagline">استوديو طباعة شبكة الصور A4</p>
 
-  <!-- ==================== APP HEADER ==================== -->
-  <header class="bg-slate-800 border-b border-slate-700 sticky top-0 z-40 shadow-lg">
-    <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <img src="icon-192.png" alt="Icon" class="w-10 h-10 rounded-xl shadow border border-slate-600">
-        <div>
-          <h1 class="font-extrabold text-base sm:text-lg text-white">استوديو طباعة شبكة الصور A4</h1>
-          <p class="text-xs text-sky-400">ورق مقوى | مسافة 1 ملم | تصدير ومشاركة Word (.docx) أصلي | v5.2</p>
-        </div>
-      </div>
-      <div class="flex items-center gap-2">
-        <button onclick="forceAppUpdate()" title="تحديث فوري ومسح الكاش" class="bg-slate-700/80 hover:bg-slate-600 text-sky-300 font-bold px-2.5 py-2 rounded-xl text-xs flex items-center gap-1 border border-slate-600 shadow transition">
-          <span>🔄</span>
-          <span class="hidden sm:inline">تحديث التطبيق</span>
-        </button>
-        <button id="btnOpenAddModal" class="bg-sky-600 hover:bg-sky-500 text-white font-bold px-3 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-1.5 shadow transition">
-          <span>+</span>
-          <span>إضافة عنصر</span>
-        </button>
-      </div>
+    <div class="field">
+      <span class="ico">👤</span>
+      <input id="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" data-i18n-ph="username" placeholder="اسم المستخدم" dir="ltr">
+    </div>
+    <div class="field">
+      <span class="ico">🔒</span>
+      <input id="password" type="password" autocomplete="current-password" data-i18n-ph="password" placeholder="كلمة المرور" dir="ltr">
+      <button id="eyeBtn" class="eye" type="button">👁</button>
     </div>
 
-    <!-- Navigation Tabs -->
-    <div class="max-w-4xl mx-auto px-4 pb-2">
-      <div class="bg-slate-900 p-1 rounded-xl flex gap-1 text-xs sm:text-sm font-bold">
-        <button id="tabQueue" class="flex-1 py-2 rounded-lg text-center bg-slate-800 text-white shadow transition">
-          العناصر والقائمة (<span id="itemsBadgeCount">0</span>)
-        </button>
-        <button id="tabPreview" class="flex-1 py-2 rounded-lg text-center text-slate-400 hover:text-white transition">
-          معاينة الورق كملف Word (<span id="pagesBadgeCount">1</span> ورقة)
-        </button>
+    <div id="loginError" class="error hidden"></div>
+
+    <button id="btnLogin" class="primary" type="button"><span data-i18n="loginButton">تسجيل الدخول</span></button>
+    <button id="btnCreate" class="link" type="button" data-i18n="createAccount">إنشاء حساب</button>
+
+    <div class="grow"></div>
+    <div id="installLogin" class="install hidden">
+      <img src="icon-192.png" alt="PhotoMagic">
+      <div class="txt">
+        <b data-i18n="installAppTitle">تثبيت التطبيق</b>
+        <span data-i18n="installAppBody">أضف PhotoMagic إلى شاشتك الرئيسية — بأيقونته الخاصة وبملء الشاشة.</span>
       </div>
+      <button class="ok" type="button" data-install-now data-i18n="installAppNow">تثبيت</button>
+      <button class="x" type="button" data-install-later>✕</button>
     </div>
-  </header>
-
-  <!-- ==================== MAIN CONTENT AREA ==================== -->
-  <main class="flex-1 max-w-4xl w-full mx-auto p-4 flex flex-col">
-
-    <!-- TAB 1: ITEMS QUEUE -->
-    <section id="viewQueue" class="flex-1 flex flex-col">
-      <!-- Empty State -->
-      <div id="emptyState" class="my-auto py-12 px-4 text-center bg-slate-800/60 rounded-2xl border border-slate-700/60">
-        <div class="w-16 h-16 mx-auto mb-3 bg-sky-500/10 rounded-2xl flex items-center justify-center text-sky-400 text-3xl">
-          🖼️
-        </div>
-        <h2 class="text-lg font-bold text-white mb-1">لا توجد عناصر مضافة بعد</h2>
-        <p class="text-xs sm:text-sm text-slate-400 max-w-md mx-auto mb-4">
-          يمكنك إضافة صور شخصية (مثل 3×4 سم وتكرارها 6 بالسطر)، أو مستندات وهوية بوجهين (أمامي وخلفي) لطباعتها في صف مستقل أسفل الصور بمسافة 1 ملم دون أي تداخل.
-        </p>
-        <button onclick="document.getElementById('btnOpenAddModal').click()" class="bg-sky-600 hover:bg-sky-500 text-white font-bold px-5 py-2.5 rounded-xl text-sm inline-flex items-center gap-2 shadow">
-          <span>+</span>
-          <span>إضافة صورة أو مستند</span>
-        </button>
-      </div>
-
-      <!-- Items List -->
-      <div id="itemsContainer" class="space-y-3 hidden">
-        <!-- Rendered dynamically -->
-      </div>
-    </section>
-
-    <!-- TAB 2: MULTI-PAGE WORD PREVIEW -->
-    <section id="viewPreview" class="flex-1 flex flex-col hidden">
-      <div class="mb-3 flex items-center justify-between text-xs text-slate-400 px-1">
-        <span>تظهر الأوراق بالتمرير الرأسي تماماً كملف Word</span>
-        <span class="text-sky-400 font-bold bg-sky-950 px-2 py-0.5 rounded border border-sky-800">
-          هوامش 0.6 سم | مسافة 1 ملم | ورق مقوى 300 DPI
-        </span>
-      </div>
-
-      <!-- Scrollable Multi-Page Document Container -->
-      <div id="wordPagesScrollContainer" class="flex-1 space-y-6 overflow-y-auto pb-6">
-        <!-- Canvas pages rendered dynamically -->
-      </div>
-
-      <!-- Sticky Export Footer -->
-      <div class="sticky bottom-0 bg-slate-800/95 backdrop-blur p-4 rounded-2xl border border-slate-700 shadow-2xl mt-4">
-        <div class="flex flex-col sm:flex-row gap-2">
-          <button id="btnShareDocx" class="flex-1 bg-gradient-to-r from-blue-600 to-sky-600 hover:from-blue-500 hover:to-sky-500 text-white font-bold py-3 px-4 rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 transition">
-            <span class="text-lg">📲</span> <span>مشاركة ملف Word (.docx)</span>
-          </button>
-          <button id="btnDownloadDocx" class="bg-slate-700 hover:bg-slate-600 text-sky-300 font-bold py-3 px-4 rounded-xl text-sm flex items-center justify-center gap-2 transition">
-            <span>📥</span> <span>تنزيل Word (.docx)</span>
-          </button>
-          <button id="btnSaveAllImages" class="bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold py-3 px-3 rounded-xl text-sm flex items-center justify-center gap-2 transition">
-            <span>💾</span> <span>حفظ صور (300 DPI)</span>
-          </button>
-          <button onclick="window.print()" class="bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold py-3 px-3 rounded-xl text-sm flex items-center justify-center gap-2 transition">
-            <span>🖨️</span> <span>طباعة</span>
-          </button>
-        </div>
-      </div>
-    </section>
-
   </main>
 
-  <!-- ==================== MODAL: CHOOSE TYPE (صورة أم مستند) ==================== -->
-  <div id="modalChooseType" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-4">
-    <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-md w-full p-5 shadow-2xl">
-      <h3 class="text-base font-bold text-white mb-4 text-center">اختر نوع العنصر المراد إضافته</h3>
-      
-      <div class="space-y-3">
-        <!-- Option 1: Photo -->
-        <label class="block cursor-pointer bg-slate-900 hover:bg-slate-850 p-4 rounded-xl border border-sky-500/40 hover:border-sky-500 transition">
-          <input type="file" id="inputPhotoFiles" accept="image/*" multiple class="hidden">
-          <div class="flex items-center gap-3">
-            <span class="text-3xl">📷</span>
-            <div>
-              <h4 class="font-bold text-white text-sm">صورة شخصية / صور عادية</h4>
-              <p class="text-xs text-slate-400">تتكرر في صفوف شبكة A4 (مثل 3×4 سم، 6 صور بالسطر كحد أقصى)</p>
-            </div>
-          </div>
-        </label>
+  <!-- =================================================== CREATE ACCOUNT -->
+  <main id="viewCreate" class="page hidden">
+    <button class="back" type="button" id="btnBackToLogin">←</button>
+    <img class="brand small" src="assets/branding/app_logo.png" alt="ABODY CODE">
+    <h1 class="title" data-i18n="createAccountTitle">إنشاء حساب</h1>
+    <div class="glass-card" data-i18n="createAccountMessage"></div>
+    <div class="grow"></div>
+    <button class="channel ch-wa" type="button" data-url="https://wa.me/qr/ZBCM2HUUDBTWB1"><span>💬</span><span data-i18n="contactWhatsapp">واتساب</span><span class="chev">›</span></button>
+    <button class="channel ch-tg" type="button" data-url="https://t.me/Abdullah2001jalal"><span>✈️</span><span data-i18n="contactTelegram">تيليجرام</span><span class="chev">›</span></button>
+    <button class="channel ch-em" type="button" data-url="mailto:abdullah2001jalal@gmail.com"><span>✉️</span><span data-i18n="contactEmail">ايميل</span><span class="chev">›</span></button>
+    <button class="channel ch-tg" type="button" data-url="https://t.me/AbodyCode"><span>📢</span><span data-i18n="contactChannel">قناتي على تيليجرام</span><span class="chev">›</span></button>
+  </main>
 
-        <!-- Option 2: Document -->
-        <div id="btnSelectDocumentType" class="cursor-pointer bg-slate-900 hover:bg-slate-850 p-4 rounded-xl border border-sky-500/40 hover:border-sky-500 transition">
-          <div class="flex items-center gap-3">
-            <span class="text-3xl">🪪</span>
-            <div>
-              <h4 class="font-bold text-white text-sm">مستند / هوية (وجه أمامي وخلفي)</h4>
-              <p class="text-xs text-slate-400">يوضع بصف مستقل أسفل الصور مع خيار الوجهان بنفس الصفحة أو بظهر الورقة</p>
-            </div>
-          </div>
+  <!-- ============================================================= HOME -->
+  <main id="viewHome" class="page hidden">
+    <div class="topbar">
+      <div class="group">
+        <img class="app-badge" src="icon-192.png" alt="PhotoMagic">
+        <!-- Back button right beside the app/home badge: returns one step
+             (closes any open sheet, or returns from the paper preview tab
+             to the items tab). -->
+        <button id="btnBackStep" class="icon-btn" type="button" aria-label="رجوع" title="رجوع">←</button>
+        <div class="seg" role="group">
+          <button id="langEnH" type="button">EN</button>
+          <button id="langArH" type="button">ع</button>
         </div>
+        <button id="themeBtnHome" class="icon-btn" type="button" aria-label="theme">🌙</button>
       </div>
+      <button class="outline sm" type="button" data-open-contact>
+        <span>🎧</span><span data-i18n="contactMe">تواصل معي</span>
+      </button>
+    </div>
 
-      <div class="mt-5 text-left">
-        <button onclick="closeModal('modalChooseType')" class="text-slate-400 hover:text-white text-sm font-semibold px-4 py-2">
-          إلغاء
-        </button>
+    <div class="signout-row">
+      <button class="signout" type="button" id="btnLogout">⏏ <span data-i18n="logout">تسجيل الخروج</span></button>
+    </div>
+
+    <img class="brand home" src="assets/branding/app_logo.png" alt="ABODY CODE">
+    <h1 class="title" data-i18n="appTitle">PhotoMagic</h1>
+    <p class="tagline" data-i18n="taglineShort">استوديو طباعة شبكة الصور A4 و المستندات</p>
+
+    <!-- Empty-state box right below the logo: logo + message + the only
+         add button form ONE tidy centered hero composition. -->
+    <div id="itemsEmpty" class="card empty">
+      <div class="ico">🖼️</div>
+      <h2 data-i18n="emptyTitle">لا توجد عناصر مضافة بعد</h2>
+      <p data-i18n="emptyBody">أضف صوراً شخصية أو مستندات لطباعتها على ورقة A4.</p>
+      <button class="primary" type="button" id="btnOpenAdd" style="max-width:260px;margin:0 auto"><span>+</span><span data-i18n="addItem">إضافة عنصر</span></button>
+    </div>
+
+    <div id="installHome" class="install hidden">
+      <img src="icon-192.png" alt="PhotoMagic">
+      <div class="txt">
+        <b data-i18n="installAppTitle">تثبيت التطبيق</b>
+        <span data-i18n="installAppBody">أضف PhotoMagic إلى شاشتك الرئيسية — بأيقونته الخاصة وبملء الشاشة.</span>
+      </div>
+      <button class="ok" type="button" data-install-now data-i18n="installAppNow">تثبيت</button>
+      <button class="x" type="button" data-install-later>✕</button>
+    </div>
+
+    <div class="tabs">
+      <button id="tabItems" class="on" type="button"><span data-i18n="tabItems">العناصر</span> (<span id="countItems">0</span>)</button>
+      <button id="tabPapers" type="button"><span data-i18n="tabPapers">معاينة الورق</span> (<span id="countPapers">1</span>)</button>
+    </div>
+
+    <section id="paneItems">
+      <!-- Compact add button while items exist (the hero empty-box is gone
+           once real items are added) — keeps the app with ONE add button. -->
+      <button id="btnAddMore" class="primary hidden" type="button" style="max-width:260px;margin:0 auto 12px"><span>+</span><span data-i18n="addItem">إضافة عنصر</span></button>
+      <div id="itemsList" class="hidden" style="display:flex;flex-direction:column;gap:10px"></div>
+    </section>
+
+    <section id="panePapers" class="hidden">
+      <div id="papersList" class="papers"></div>
+      <div class="footer-actions">
+        <button class="share" type="button" id="btnShareDocx" data-i18n="exportShare">📲 مشاركة ملف Word</button>
+        <button type="button" id="btnDownloadDocx" data-i18n="exportDownload">📥 تنزيل Word</button>
+        <button type="button" id="btnSaveImages" data-i18n="saveImages">💾 حفظ الصور 300 DPI</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- =================================================== CONTACT SHEET -->
+  <div id="contactSheet" class="sheet-backdrop hidden">
+    <div class="sheet">
+      <h3 data-i18n="contactMe">تواصل معي</h3>
+      <button class="channel ch-wa" type="button" data-url="https://wa.me/qr/ZBCM2HUUDBTWB1"><span>💬</span><span data-i18n="contactWhatsapp">واتساب</span><span class="chev">›</span></button>
+      <button class="channel ch-tg" type="button" data-url="https://t.me/Abdullah2001jalal"><span>✈️</span><span data-i18n="contactTelegram">تيليجرام</span><span class="chev">›</span></button>
+      <button class="channel ch-em" type="button" data-url="mailto:abdullah2001jalal@gmail.com"><span>✉️</span><span data-i18n="contactEmail">ايميل</span><span class="chev">›</span></button>
+      <button class="channel ch-tg" type="button" data-url="https://t.me/AbodyCode"><span>📢</span><span data-i18n="contactChannel">قناتي على تيليجرام</span><span class="chev">›</span></button>
+    </div>
+  </div>
+
+  <!-- ======================================================== ADD SHEET -->
+  <div id="chooseSheet" class="sheet-backdrop center hidden">
+    <div class="sheet">
+      <h3 data-i18n="chooseType">اختر نوع العنصر</h3>
+      <label class="opt" for="photoInput">
+        <span class="big">📷</span>
+        <span><b data-i18n="photoType">صورة شخصية / صور عادية</b><span data-i18n="photoBody">تتكرر في شبكة A4 (مثل 3×4 سم)</span></span>
+      </label>
+      <input id="photoInput" type="file" accept="image/*" multiple class="hidden">
+      <label class="opt" id="pickDoc">
+        <span class="big">🪪</span>
+        <span><b data-i18n="docType">مستند / هوية (وجهان)</b><span data-i18n="docBody">صف مستقل أسفل الصور</span></span>
+      </label>
+      <div class="actions">
+        <button class="ghost" type="button" data-close-sheets data-i18n="cancel">إلغاء</button>
       </div>
     </div>
   </div>
 
-  <!-- ==================== MODAL: ADD DOCUMENT (مستند هوية بوجهين) ==================== -->
-  <div id="modalAddDocument" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-4 overflow-y-auto">
-    <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-lg w-full p-5 shadow-2xl my-8">
-      <h3 class="text-base font-bold text-white mb-3 text-center">إضافة مستند أو هوية (وجه أمامي وخلفي)</h3>
-
-      <!-- Front and Back Pickers -->
-      <div class="grid grid-cols-2 gap-3 mb-4">
-        <!-- Front Face -->
-        <label class="cursor-pointer border-2 border-dashed border-sky-500/60 hover:border-sky-400 rounded-xl p-3 flex flex-col items-center justify-center text-center bg-slate-900 h-28 relative overflow-hidden">
-          <input type="file" id="inputDocFront" accept="image/*" class="hidden">
-          <img id="previewDocFront" class="absolute inset-0 w-full h-full object-cover hidden">
-          <div id="placeholderDocFront" class="text-center">
-            <span class="text-2xl">📸</span>
-            <div class="text-xs font-bold text-white mt-1">الوجه الأمامي</div>
-            <div class="text-[10px] text-sky-400">(مطلوب)</div>
-          </div>
+  <div id="docSheet" class="sheet-backdrop center hidden">
+    <div class="sheet">
+      <h3 data-i18n="docTitle">إضافة مستند / هوية</h3>
+      <div class="previews">
+        <label class="pick" for="docFrontInput">
+          <input id="docFrontInput" type="file" accept="image/*" class="hidden">
+          <img id="docFrontPreview" class="hidden" alt="">
+          <span>📸</span><b data-i18n="frontFace">الوجه الأمامي</b>
         </label>
-
-        <!-- Back Face -->
-        <label class="cursor-pointer border-2 border-dashed border-slate-600 hover:border-slate-500 rounded-xl p-3 flex flex-col items-center justify-center text-center bg-slate-900 h-28 relative overflow-hidden">
-          <input type="file" id="inputDocBack" accept="image/*" class="hidden">
-          <img id="previewDocBack" class="absolute inset-0 w-full h-full object-cover hidden">
-          <div id="placeholderDocBack" class="text-center">
-            <span class="text-2xl">🔄</span>
-            <div class="text-xs font-bold text-white mt-1">الوجه الخلفي</div>
-            <div class="text-[10px] text-slate-400">(اختياري)</div>
-          </div>
+        <label class="pick" for="docBackInput">
+          <input id="docBackInput" type="file" accept="image/*" class="hidden">
+          <img id="docBackPreview" class="hidden" alt="">
+          <span>🔄</span><b data-i18n="backFace">الوجه الخلفي</b>
         </label>
       </div>
-
-      <!-- Placement Mode Options -->
-      <div class="bg-slate-900 p-3 rounded-xl border border-slate-700 mb-4 text-xs">
-        <div class="font-bold text-slate-200 mb-2">موضع الوجهين في الطباعة:</div>
-        <div class="space-y-2">
-          <label class="flex items-start gap-2 cursor-pointer">
-            <input type="radio" name="duplexOption" value="SAME_PAGE" checked class="mt-0.5 text-sky-500">
-            <div>
-              <div class="font-bold text-white">الوجهان بنفس الصفحة</div>
-              <div class="text-[11px] text-slate-400">الأمامي على اليمين والخلفي على اليسار (0.6 سم من حواف الورقة)</div>
-            </div>
-          </label>
-          <label class="flex items-start gap-2 cursor-pointer">
-            <input type="radio" name="duplexOption" value="BACK_SIDE" class="mt-0.5 text-sky-500">
-            <div>
-              <div class="font-bold text-white">الوجه الخلفي في ظهر الورقة (صفحة ثانية)</div>
-              <div class="text-[11px] text-slate-400">لطباعة الوجهين Duplex متطابقين ظهر لظهر بدقة</div>
-            </div>
-          </label>
-        </div>
+      <div class="heading" data-i18n="placement">موضع الوجهين في الطباعة</div>
+      <label class="opt"><input type="radio" name="duplex" value="SAME_PAGE" checked><span><b data-i18n="samePage">الوجهان بنفس الصفحة</b></span></label>
+      <label class="opt"><input type="radio" name="duplex" value="BACK_SIDE"><span><b data-i18n="backSide">الوجه الخلفي في ظهر الورقة</b></span></label>
+      <div class="grid2">
+        <div><div class="heading" data-i18n="widthCm">العرض (سم)</div><input id="docW" type="number" step="0.1" value="8.5"></div>
+        <div><div class="heading" data-i18n="heightCm">الارتفاع (سم)</div><input id="docH" type="number" step="0.1" value="5.4"></div>
       </div>
-
-      <!-- Dimensions Inputs (with white text) -->
-      <div class="grid grid-cols-2 gap-3 mb-3">
-        <div>
-          <label class="block text-xs text-sky-300 mb-1">العرض (سم):</label>
-          <input type="number" step="0.1" id="inputDocWidth" value="8.5" class="w-full bg-slate-900 text-white border border-slate-600 rounded-lg p-2 text-sm focus:border-sky-500 focus:outline-none">
-        </div>
-        <div>
-          <label class="block text-xs text-sky-300 mb-1">الارتفاع (سم):</label>
-          <input type="number" step="0.1" id="inputDocHeight" value="5.4" class="w-full bg-slate-900 text-white border border-slate-600 rounded-lg p-2 text-sm focus:border-sky-500 focus:outline-none">
-        </div>
+      <div class="actions" style="margin-bottom:12px">
+        <button class="ghost" type="button" data-preset="8.5,5.4">هوية 8.5×5.4</button>
+        <button class="ghost" type="button" data-preset="12.5,8.8">جواز 12.5×8.8</button>
       </div>
-
-      <!-- Preset Chips -->
-      <div class="flex gap-1.5 mb-3 overflow-x-auto text-xs pb-1">
-        <button type="button" onclick="setDocPreset(8.5, 5.4)" class="bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-[11px] whitespace-nowrap">هوية (8.5×5.4)</button>
-        <button type="button" onclick="setDocPreset(12.5, 8.8)" class="bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-[11px] whitespace-nowrap">جواز (12.5×8.8)</button>
-        <button type="button" onclick="setDocPreset(14.8, 21.0)" class="bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-[11px] whitespace-nowrap">نصف ورقة A5</button>
-      </div>
-
-      <!-- Copies -->
-      <div class="mb-4">
-        <label class="block text-xs text-slate-300 mb-1">عدد النسخ المطلوبة:</label>
-        <input type="number" id="inputDocCopies" value="1" min="1" class="w-full bg-slate-900 text-white border border-slate-600 rounded-lg p-2 text-sm focus:border-sky-500 focus:outline-none">
-      </div>
-
-      <div class="flex justify-end gap-2">
-        <button onclick="closeModal('modalAddDocument')" class="text-slate-400 hover:text-white px-4 py-2 text-sm">إلغاء</button>
-        <button id="btnSaveDocument" class="bg-sky-600 hover:bg-sky-500 text-white font-bold px-4 py-2 rounded-xl text-sm shadow">إضافة المستند</button>
+      <div class="heading" data-i18n="copies">عدد النسخ</div>
+      <input id="docCopies" type="number" min="1" value="1" style="margin-bottom:14px">
+      <div class="actions">
+        <button class="ghost" type="button" data-close-sheets data-i18n="cancel">إلغاء</button>
+        <button class="primary" type="button" id="btnAddDoc" data-i18n="add">إضافة</button>
       </div>
     </div>
   </div>
 
-  <!-- Print Container -->
-  <div id="printArea" class="hidden"></div>
-
-  <!-- ==================== JAVASCRIPT APPLICATION LOGIC ==================== -->
-  <script>
-    // State
-    const items = [];
-    let deferredInstallPrompt = null;
-    let docFrontBmp = null;
-    let docBackBmp = null;
-
-    // Force App Update & Cache Clear helper
-    async function forceAppUpdate() {
-      showToast('جاري تحديث التطبيق ومسح التخزين المؤقت...', '🔄');
-      if ('serviceWorker' in navigator) {
-        try {
-          const regs = await navigator.serviceWorker.getRegistrations();
-          for (const reg of regs) {
-            await reg.unregister();
-          }
-        } catch (e) { console.warn(e); }
-      }
-      if ('caches' in window) {
-        try {
-          const keys = await caches.keys();
-          for (const key of keys) {
-            await caches.delete(key);
-          }
-        } catch (e) { console.warn(e); }
-      }
-      setTimeout(() => {
-        window.location.href = window.location.pathname + '?v=' + Date.now();
-      }, 400);
-    }
-
-    // Service Worker Registration & PWA Install Prompt handling
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js?v=6').then(reg => {
-          reg.update();
-        }).catch(err => console.log('SW reg fail', err));
-      });
-
-      let isRefreshing = false;
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!isRefreshing) {
-          isRefreshing = true;
-          window.location.reload();
-        }
-      });
-    }
-
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      deferredInstallPrompt = e;
-      document.getElementById('installBanner').classList.remove('hidden');
-    });
-
-    document.getElementById('btnInstallApp').addEventListener('click', async () => {
-      if (deferredInstallPrompt) {
-        deferredInstallPrompt.prompt();
-        const choice = await deferredInstallPrompt.userChoice;
-        if (choice.outcome === 'accepted') {
-          document.getElementById('installBanner').classList.add('hidden');
-        }
-        deferredInstallPrompt = null;
-      } else {
-        alert('لتثبيت التطبيق على الشاشة الرئيسية:\n- على كروم/أندرويد: اضغط على القائمة (⋮) ثم "تثبيت التطبيق" أو "إضافة للشاشة الرئيسية".\n- على آيفون: اضغط زر المشاركة ثم "Add to Home Screen".');
-      }
-    });
-
-    document.getElementById('btnCloseInstall').addEventListener('click', () => {
-      document.getElementById('installBanner').classList.add('hidden');
-    });
-
-    // Navigation Tabs
-    const tabQueue = document.getElementById('tabQueue');
-    const tabPreview = document.getElementById('tabPreview');
-    const viewQueue = document.getElementById('viewQueue');
-    const viewPreview = document.getElementById('viewPreview');
-
-    tabQueue.addEventListener('click', () => {
-      tabQueue.className = 'flex-1 py-2 rounded-lg text-center bg-slate-800 text-white shadow transition';
-      tabPreview.className = 'flex-1 py-2 rounded-lg text-center text-slate-400 hover:text-white transition';
-      viewQueue.classList.remove('hidden');
-      viewPreview.classList.add('hidden');
-    });
-
-    tabPreview.addEventListener('click', () => {
-      tabPreview.className = 'flex-1 py-2 rounded-lg text-center bg-slate-800 text-white shadow transition';
-      tabQueue.className = 'flex-1 py-2 rounded-lg text-center text-slate-400 hover:text-white transition';
-      viewQueue.classList.add('hidden');
-      viewPreview.classList.remove('hidden');
-      renderMultiPageWordView();
-    });
-
-    // Modals
-    function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
-    function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
-
-    document.getElementById('btnOpenAddModal').addEventListener('click', () => openModal('modalChooseType'));
-    document.getElementById('btnSelectDocumentType').addEventListener('click', () => {
-      closeModal('modalChooseType');
-      openModal('modalAddDocument');
-    });
-
-    // Photo input handling
-    document.getElementById('inputPhotoFiles').addEventListener('change', async (e) => {
-      const files = Array.from(e.target.files);
-      for (const file of files) {
-        const bmp = await loadImage(file);
-        items.push({
-          id: 'item_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-          name: 'صورة ' + (items.filter(i => i.type === 'PHOTO').length + 1),
-          type: 'PHOTO',
-          sourceBitmap: bmp,
-          widthCm: 3.0,
-          heightCm: 4.0,
-          copiesCount: 6
-        });
-      }
-      closeModal('modalChooseType');
-      renderItemsQueue();
-    });
-
-    // Document input handling
-    document.getElementById('inputDocFront').addEventListener('change', async (e) => {
-      if (e.target.files[0]) {
-        docFrontBmp = await loadImage(e.target.files[0]);
-        document.getElementById('previewDocFront').src = docFrontBmp.src;
-        document.getElementById('previewDocFront').classList.remove('hidden');
-        document.getElementById('placeholderDocFront').classList.add('hidden');
-      }
-    });
-
-    document.getElementById('inputDocBack').addEventListener('change', async (e) => {
-      if (e.target.files[0]) {
-        docBackBmp = await loadImage(e.target.files[0]);
-        document.getElementById('previewDocBack').src = docBackBmp.src;
-        document.getElementById('previewDocBack').classList.remove('hidden');
-        document.getElementById('placeholderDocBack').classList.add('hidden');
-      }
-    });
-
-    window.setDocPreset = function(w, h) {
-      document.getElementById('inputDocWidth').value = w;
-      document.getElementById('inputDocHeight').value = h;
-    };
-
-    document.getElementById('btnSaveDocument').addEventListener('click', () => {
-      if (!docFrontBmp) {
-        alert('يرجى اختيار صورة الوجه الأمامي للمستند');
-        return;
-      }
-      const w = parseFloat(document.getElementById('inputDocWidth').value) || 8.5;
-      const h = parseFloat(document.getElementById('inputDocHeight').value) || 5.4;
-      const c = parseInt(document.getElementById('inputDocCopies').value) || 1;
-      const duplex = document.querySelector('input[name="duplexOption"]:checked').value;
-
-      items.push({
-        id: 'doc_' + Date.now(),
-        name: `مستند ${w}×${h} سم`,
-        type: 'DOCUMENT',
-        sourceBitmap: docFrontBmp,
-        backBitmap: docBackBmp,
-        duplexMode: duplex,
-        widthCm: w,
-        heightCm: h,
-        copiesCount: c
-      });
-
-      // Reset dialog
-      docFrontBmp = null;
-      docBackBmp = null;
-      document.getElementById('previewDocFront').classList.add('hidden');
-      document.getElementById('previewDocBack').classList.add('hidden');
-      document.getElementById('placeholderDocFront').classList.remove('hidden');
-      document.getElementById('placeholderDocBack').classList.remove('hidden');
-      closeModal('modalAddDocument');
-      renderItemsQueue();
-    });
-
-    function loadImage(file) {
-      return new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.src = URL.createObjectURL(file);
-      });
-    }
-
-    // Render Queue
-    function renderItemsQueue() {
-      const container = document.getElementById('itemsContainer');
-      const empty = document.getElementById('emptyState');
-      document.getElementById('itemsBadgeCount').textContent = items.length;
-
-      if (items.length === 0) {
-        container.classList.add('hidden');
-        empty.classList.remove('hidden');
-        return;
-      }
-
-      container.classList.remove('hidden');
-      empty.classList.add('hidden');
-      container.innerHTML = '';
-
-      items.forEach((item, index) => {
-        const card = document.createElement('div');
-        card.className = 'bg-slate-800 border border-slate-700 rounded-2xl p-4 flex flex-col gap-3 shadow';
-        
-        const isDoc = item.type === 'DOCUMENT';
-        card.innerHTML = `
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <span class="text-xs px-2 py-0.5 rounded font-bold ${isDoc ? 'bg-blue-900 text-blue-200' : 'bg-teal-900 text-teal-200'}">
-                ${isDoc ? 'مستند / هوية' : 'صورة عادية'}
-              </span>
-              <span class="font-bold text-white text-sm">${item.name}</span>
-            </div>
-            <!-- SEPARATED DELETE BUTTON -->
-            <button onclick="deleteItem(${index})" class="bg-red-950/80 hover:bg-red-900 text-red-400 p-2 rounded-lg text-xs flex items-center gap-1 transition">
-              🗑️ <span>حذف</span>
-            </button>
-          </div>
-
-          <div class="flex items-center gap-3">
-            <div class="w-16 h-12 bg-black rounded-lg overflow-hidden flex items-center justify-center border border-slate-700">
-              <img src="${item.sourceBitmap.src}" class="w-full h-full object-cover">
-            </div>
-            <div class="flex-1 text-xs">
-              <div class="text-slate-200 font-bold">${item.widthCm} × ${item.heightCm} سم</div>
-              <div class="text-sky-400 mt-0.5">
-                ${isDoc ? (item.duplexMode === 'SAME_PAGE' ? 'الوجهان بنفس الصفحة' : 'الوجه الخلفي بالصفحة الثانية') : (item.widthCm <= 3.05 ? '6 صور بالسطر كحد أقصى' : 'أبعاد خاصة')}
-              </div>
-            </div>
-            <!-- COPIES STEPPER WITHOUT CIRCLES -->
-            <div class="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-700">
-              <span class="text-xs text-slate-400">النسخ:</span>
-              <button onclick="updateCopies(${index}, -1)" class="text-slate-300 hover:text-white font-extrabold text-base px-1.5">－</button>
-              <span class="font-bold text-sky-400 text-sm">${item.copiesCount}</span>
-              <button onclick="updateCopies(${index}, 1)" class="text-sky-400 hover:text-sky-300 font-extrabold text-base px-1.5">＋</button>
-            </div>
-          </div>
-        `;
-        container.appendChild(card);
-      });
-    }
-
-    window.updateCopies = function(idx, delta) {
-      items[idx].copiesCount = Math.max(1, items[idx].copiesCount + delta);
-      renderItemsQueue();
-    };
-
-    window.deleteItem = function(idx) {
-      items.splice(idx, 1);
-      renderItemsQueue();
-    };
-
-    // ==================== A4 GRID LAYOUT ENGINE (Calculates without overlap) ====================
-    function calculateA4Plan() {
-      const pageWidth = 21.0;
-      const pageHeight = 29.7;
-      const margin = 0.6;
-      const spacing = 0.1;
-
-      const maxX = pageWidth - margin;
-      const maxY = pageHeight - margin;
-
-      const placed = [];
-      let globalIndex = 0;
-
-      // 1. Separate: Photos are always placed first in top row(s),
-      // and Documents are always placed in rows below the photos with 1 mm spacing!
-      const photoItems = items.filter(i => i.type === 'PHOTO');
-      const docItems = items.filter(i => i.type === 'DOCUMENT');
-
-      let currentPage = 0;
-      let currentX = margin;
-      let currentY = margin;
-      let currentRowMaxHeight = 0;
-      let photosInRow = 0;
-
-      // Layout all standard photos in top rows first
-      for (const item of photoItems) {
-        const w = Math.max(1.0, item.widthCm);
-        const h = Math.max(1.0, item.heightCm);
-
-        for (let c = 0; c < item.copiesCount; c++) {
-          const exceedsW = (currentX + w) > (maxX + 0.01);
-          const reaches6 = (w <= 3.05 && photosInRow >= 6);
-
-          if (exceedsW || reaches6) {
-            currentY += currentRowMaxHeight + spacing;
-            currentX = margin;
-            currentRowMaxHeight = 0;
-            photosInRow = 0;
-          }
-
-          if (currentY + h > maxY + 0.01) {
-            currentPage++;
-            currentX = margin;
-            currentY = margin;
-            currentRowMaxHeight = 0;
-            photosInRow = 0;
-          }
-
-          placed.push({
-            item, isBack: false, pageIndex: currentPage,
-            x: currentX, y: currentY, w, h, index: globalIndex++
-          });
-
-          photosInRow++;
-          currentRowMaxHeight = Math.max(currentRowMaxHeight, h);
-          currentX += w + spacing;
-        }
-      }
-
-      // If photos were placed in the last row, advance Y by row height + 1 mm spacing
-      // so documents are placed in the row BELOW the photos with 1 mm gap!
-      if (photosInRow > 0) {
-        currentY += currentRowMaxHeight + spacing;
-        currentX = margin;
-        currentRowMaxHeight = 0;
-        photosInRow = 0;
-      }
-
-      // Layout all documents in row(s) below the photos
-      for (const item of docItems) {
-        const w = Math.max(1.0, item.widthCm);
-        const h = Math.max(1.0, item.heightCm);
-
-        for (let c = 0; c < item.copiesCount; c++) {
-          if (currentY + h > maxY + 0.01) {
-            const highest = placed.reduce((max, p) => Math.max(max, p.pageIndex), currentPage);
-            currentPage = highest + 1;
-            currentX = margin;
-            currentY = margin;
-          }
-
-          if (item.duplexMode === 'BACK_SIDE') {
-            // Duplex Mode:
-            // Front Face on Page 1 (currentPage) at left margin (0.6 cm)
-            // Back Face on Page 2 (currentPage + 1) mirrored 0.6cm from right edge
-            // Both at the exact same vertical position Y (1 mm below photos)
-            const frontPage = currentPage;
-            const backPage = currentPage + 1;
-
-            placed.push({
-              item, isBack: false, pageIndex: frontPage,
-              x: margin, y: currentY, w, h, index: globalIndex++
-            });
-
-            placed.push({
-              item, isBack: true, pageIndex: backPage,
-              x: pageWidth - margin - w, y: currentY, w, h, index: globalIndex++
-            });
-
-            currentY += h + spacing;
-            currentX = margin;
-          } else {
-            // Same Page Document
-            if (item.backBitmap) {
-              // Back on Left (0.6cm from left edge)
-              placed.push({
-                item, isBack: true, pageIndex: currentPage,
-                x: margin, y: currentY, w, h, index: globalIndex++
-              });
-              // Front on Right (0.6cm from right edge)
-              placed.push({
-                item, isBack: false, pageIndex: currentPage,
-                x: pageWidth - margin - w, y: currentY, w, h, index: globalIndex++
-              });
-            } else {
-              // Single face
-              placed.push({
-                item, isBack: false, pageIndex: currentPage,
-                x: margin, y: currentY, w, h, index: globalIndex++
-              });
-            }
-
-            currentY += h + spacing;
-            currentX = margin;
-          }
-        }
-      }
-
-      const totalPages = placed.length === 0 ? 1 : Math.max(...placed.map(p => p.pageIndex)) + 1;
-      return { placed, totalPages, pageWidth, pageHeight, margin, spacing };
-    }
-
-    // ==================== MULTI-PAGE WORD SCROLLING RENDERER ====================
-    function renderMultiPageWordView() {
-      const plan = calculateA4Plan();
-      const container = document.getElementById('wordPagesScrollContainer');
-      document.getElementById('pagesBadgeCount').textContent = plan.totalPages;
-      container.innerHTML = '';
-
-      if (items.length === 0) {
-        container.innerHTML = '<div class="text-center py-12 text-slate-400 text-sm">أضف عناصر أولاً لعرض الأوراق</div>';
-        return;
-      }
-
-      for (let p = 0; p < plan.totalPages; p++) {
-        const pagePhotos = plan.placed.filter(item => item.pageIndex === p);
-        const isBack = pagePhotos.some(item => item.isBack);
-        const isFront = pagePhotos.some(item => !item.isBack);
-
-        const pageBox = document.createElement('div');
-        pageBox.className = 'bg-slate-800/80 p-4 rounded-2xl border border-slate-700 shadow-xl flex flex-col items-center';
-
-        const labelText = isBack && !isFront ? `ورقة ${p + 1} من ${plan.totalPages} (الوجه الخلفي - Duplex)` : `ورقة ${p + 1} من ${plan.totalPages} (الوجه الأمامي)`;
-
-        pageBox.innerHTML = `
-          <div class="w-full flex items-center justify-between mb-3 text-xs">
-            <span class="font-bold px-3 py-1 rounded-lg ${isBack ? 'bg-blue-900 text-blue-200' : 'bg-teal-900 text-teal-200'}">
-              ${labelText}
-            </span>
-            <button onclick="saveSinglePageImage(${p})" class="text-sky-400 hover:text-sky-300 font-bold flex items-center gap-1">
-              💾 حفظ هذه الورقة
-            </button>
-          </div>
-          <!-- A4 Canvas (Aspect Ratio 21.0 / 29.7) -->
-          <div class="w-full max-w-lg aspect-[21/29.7] bg-white rounded shadow-2xl overflow-hidden border border-slate-300">
-            <canvas id="canvasPage_${p}" class="w-full h-full object-contain"></canvas>
-          </div>
-        `;
-        container.appendChild(pageBox);
-
-        // Draw page on Canvas at high definition
-        setTimeout(() => drawPageCanvas(p, plan), 10);
-      }
-    }
-
-    function drawPageCanvas(pageIdx, plan) {
-      const canvas = document.getElementById(`canvasPage_${pageIdx}`);
-      if (!canvas) return;
-
-      const dpi = 200; // Sharp screen preview
-      const a4WidthPx = Math.round((plan.pageWidth / 2.54) * dpi);
-      const a4HeightPx = Math.round((plan.pageHeight / 2.54) * dpi);
-
-      canvas.width = a4WidthPx;
-      canvas.height = a4HeightPx;
-
-      const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, a4WidthPx, a4HeightPx);
-
-      const pagePhotos = plan.placed.filter(item => item.pageIndex === pageIdx);
-      for (const p of pagePhotos) {
-        const img = p.isBack ? p.item.backBitmap : p.item.sourceBitmap;
-        const x = Math.round((p.x / 2.54) * dpi);
-        const y = Math.round((p.y / 2.54) * dpi);
-        const w = Math.round((p.w / 2.54) * dpi);
-        const h = Math.round((p.h / 2.54) * dpi);
-
-        if (!img) {
-          if (p.isBack) {
-            ctx.fillStyle = '#F8FAFC';
-            ctx.fillRect(x, y, w, h);
-            ctx.strokeStyle = '#CBD5E1';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(x, y, w, h);
-            ctx.fillStyle = '#64748B';
-            ctx.font = 'bold 13px Cairo, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText('الوجه الخلفي للمستند', x + w / 2, y + h / 2 + 5);
-          }
-          continue;
-        }
-
-        // Draw cropped centered without borders
-        drawCroppedImage(ctx, img, x, y, w, h);
-      }
-    }
-
-    function drawCroppedImage(ctx, img, dx, dy, dw, dh) {
-      const targetRatio = dw / dh;
-      const srcRatio = img.width / img.height;
-      let sx, sy, sw, sh;
-
-      if (srcRatio > targetRatio) {
-        sh = img.height;
-        sw = Math.round(img.height * targetRatio);
-        sx = Math.round((img.width - sw) / 2);
-        sy = 0;
-      } else {
-        sw = img.width;
-        sh = Math.round(img.width / targetRatio);
-        sx = 0;
-        sy = Math.round((img.height - sh) / 2);
-      }
-
-      ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
-    }
-
-    // Save Page as Image
-    window.saveSinglePageImage = function(pageIdx) {
-      const plan = calculateA4Plan();
-      const dpi = 300; // Ultra high-res 300 DPI for photo paper
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.round((plan.pageWidth / 2.54) * dpi);
-      canvas.height = Math.round((plan.pageHeight / 2.54) * dpi);
-      const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      const pagePhotos = plan.placed.filter(item => item.pageIndex === pageIdx);
-      for (const p of pagePhotos) {
-        const img = p.isBack ? p.item.backBitmap : p.item.sourceBitmap;
-        const x = Math.round((p.x / 2.54) * dpi);
-        const y = Math.round((p.y / 2.54) * dpi);
-        const w = Math.round((p.w / 2.54) * dpi);
-        const h = Math.round((p.h / 2.54) * dpi);
-
-        if (!img) {
-          if (p.isBack) {
-            ctx.fillStyle = '#F8FAFC';
-            ctx.fillRect(x, y, w, h);
-            ctx.strokeStyle = '#CBD5E1';
-            ctx.lineWidth = 3;
-            ctx.strokeRect(x, y, w, h);
-            ctx.fillStyle = '#64748B';
-            ctx.font = 'bold 20px Cairo, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText('الوجه الخلفي للمستند', x + w / 2, y + h / 2 + 8);
-          }
-          continue;
-        }
-        drawCroppedImage(ctx, img, x, y, w, h);
-      }
-
-      const a = document.createElement('a');
-      a.download = `PhotoMagic_A4_Page${pageIdx + 1}.png`;
-      a.href = canvas.toDataURL('image/png');
-      a.click();
-    };
-
-    document.getElementById('btnSaveAllImages').addEventListener('click', () => {
-      const plan = calculateA4Plan();
-      for (let p = 0; p < plan.totalPages; p++) {
-        saveSinglePageImage(p);
-      }
-    });
-
-    function showToast(msg, icon = '✅') {
-      const toast = document.getElementById('toastNotification');
-      if (!toast) return;
-      document.getElementById('toastMessage').textContent = msg;
-      document.getElementById('toastIcon').textContent = icon;
-      toast.classList.remove('hidden');
-      setTimeout(() => {
-        toast.classList.add('hidden');
-      }, 5000);
-    }
-
-    // ==================== EXPORT & SHARE WORD DOCX (.docx) ====================
-    async function generateDocxBlob() {
-      const plan = calculateA4Plan();
-      const zip = new JSZip();
-
-      // Collect unique bitmaps (handling back face placeholder if needed)
-      const faces = [];
-      const faceMap = new Map();
-
-      plan.placed.forEach(p => {
-        const key = `${p.item.id}_${p.isBack ? 'back' : 'front'}`;
-        let img = p.isBack ? p.item.backBitmap : p.item.sourceBitmap;
-        if (!img && p.isBack) {
-          const ph = document.createElement('canvas');
-          ph.width = 600;
-          ph.height = Math.round(600 * (p.h / p.w));
-          const pctx = ph.getContext('2d');
-          pctx.fillStyle = '#F8FAFC';
-          pctx.fillRect(0, 0, ph.width, ph.height);
-          pctx.strokeStyle = '#CBD5E1';
-          pctx.lineWidth = 4;
-          pctx.strokeRect(0, 0, ph.width, ph.height);
-          pctx.fillStyle = '#64748B';
-          pctx.font = 'bold 24px Cairo, sans-serif';
-          pctx.textAlign = 'center';
-          pctx.fillText('الوجه الخلفي للمستند', ph.width / 2, ph.height / 2 + 8);
-          img = ph;
-        }
-        if (img && !faceMap.has(key)) {
-          const relId = `rId${faces.length + 1}`;
-          faceMap.set(key, relId);
-          faces.push({ key, img, relId, w: p.w, h: p.h });
-        }
-      });
-
-      // Render each face to PNG bytes
-      for (const f of faces) {
-        const c = document.createElement('canvas');
-        c.width = 600;
-        c.height = Math.round(600 * (f.h / f.w));
-        const ctx = c.getContext('2d');
-        if (f.img instanceof HTMLCanvasElement) {
-          ctx.drawImage(f.img, 0, 0, c.width, c.height);
-        } else {
-          drawCroppedImage(ctx, f.img, 0, 0, c.width, c.height);
-        }
-        const dataUrl = c.toDataURL('image/png');
-        const b64 = dataUrl.split(',')[1];
-        zip.file(`word/media/image_${faces.indexOf(f) + 1}.png`, b64, { base64: true });
-      }
-
-      // [Content_Types].xml
-      zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Default Extension="png" ContentType="image/png"/>
-  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-</Types>`);
-
-      // _rels/.rels
-      zip.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-</Relationships>`);
-
-      // word/_rels/document.xml.rels
-      let docRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`;
-      faces.forEach((f, idx) => {
-        docRels += `\n  <Relationship Id="${f.relId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image_${idx + 1}.png"/>`;
-      });
-      docRels += '\n</Relationships>';
-      zip.file('word/_rels/document.xml.rels', docRels);
-
-      // word/document.xml (In Front of Text with <wp:anchor behindDoc="0">)
-      let docXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-            xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-            xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
-            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
-            xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
-  <w:body>`;
-
-      for (let p = 0; p < plan.totalPages; p++) {
-        if (p > 0) {
-          docXml += `\n    <w:p><w:r><w:br w:type="page"/></w:r></w:p>`;
-        }
-        docXml += `\n    <w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>`;
-        const pagePhotos = plan.placed.filter(item => item.pageIndex === p);
-        pagePhotos.forEach(item => {
-          const key = `${item.item.id}_${item.isBack ? 'back' : 'front'}`;
-          const relId = faceMap.get(key) || 'rId1';
-          const xEmu = Math.round(item.x * 360000);
-          const yEmu = Math.round(item.y * 360000);
-          const wEmu = Math.round(item.w * 360000);
-          const hEmu = Math.round(item.h * 360000);
-          const docId = item.index + 1;
-
-          docXml += `
-        <w:r>
-          <w:drawing>
-            <wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="251658240" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1">
-              <wp:simplePos x="0" y="0"/>
-              <wp:positionH relativeFrom="page"><wp:posOffset>${xEmu}</wp:posOffset></wp:positionH>
-              <wp:positionV relativeFrom="page"><wp:posOffset>${yEmu}</wp:posOffset></wp:positionV>
-              <wp:extent cx="${wEmu}" cy="${hEmu}"/>
-              <wp:effectExtent l="0" t="0" r="0" b="0"/>
-              <wp:wrapNone/>
-              <wp:docPr id="${docId}" name="Photo_${docId}"/>
-              <wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>
-              <a:graphic>
-                <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
-                  <pic:pic>
-                    <pic:nvPicPr>
-                      <pic:cNvPr id="${docId}" name="Photo_${docId}"/>
-                      <pic:cNvPicPr><a:picLocks noChangeAspect="1"/></pic:cNvPicPr>
-                    </pic:nvPicPr>
-                    <pic:blipFill>
-                      <a:blip r:embed="${relId}"/>
-                      <a:stretch><a:fillRect/></a:stretch>
-                    </pic:blipFill>
-                    <pic:spPr>
-                      <a:xfrm><a:off x="0" y="0"/><a:ext cx="${wEmu}" cy="${hEmu}"/></a:xfrm>
-                      <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
-                      <a:ln><a:noFill/></a:ln>
-                    </pic:spPr>
-                  </pic:pic>
-                </a:graphicData>
-              </a:graphic>
-            </wp:anchor>
-          </w:drawing>
-        </w:r>`;
-        });
-        docXml += `\n    </w:p>`;
-      }
-
-      docXml += `
-    <w:sectPr>
-      <w:pgSz w:w="11906" w:h="16838" w:orient="portrait"/>
-      <w:pgMar w:top="340" w:right="340" w:bottom="340" w:left="340" w:header="0" w:footer="0" w:gutter="0"/>
-    </w:sectPr>
-  </w:body>
-</w:document>`;
-      zip.file('word/document.xml', docXml);
-
-      // Generate authentic OpenXML .docx blob (NOT generic zip)
-      const docxMimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-      const docxBlob = await zip.generateAsync({
-        type: 'blob',
-        mimeType: docxMimeType,
-        compression: 'DEFLATE',
-        compressionOptions: { level: 6 }
-      });
-
-      const fileName = `PhotoMagic_A4_${Date.now()}.docx`;
-      const docxFile = new File([docxBlob], fileName, {
-        type: docxMimeType,
-        lastModified: Date.now()
-      });
-
-      return { docxBlob, docxFile, fileName, docxMimeType };
-    }
-
-    function downloadDocxFile(docxBlob, fileName, docxMimeType) {
-      const fileUrl = URL.createObjectURL(docxBlob);
-      const dl = document.createElement('a');
-      dl.style.display = 'none';
-      dl.href = fileUrl;
-      dl.download = fileName;
-      dl.setAttribute('download', fileName);
-      if (docxMimeType) dl.setAttribute('type', docxMimeType);
-      document.body.appendChild(dl);
-      dl.click();
-      setTimeout(() => {
-        document.body.removeChild(dl);
-        URL.revokeObjectURL(fileUrl);
-      }, 10000);
-    }
-
-    // Direct Native Share: Opens Android/iOS native share sheet directly with no modal dialog
-    async function handleShareDocx() {
-      if (items.length === 0) {
-        alert('أضف عناصر أولاً');
-        return;
-      }
-
-      const btn = document.getElementById('btnShareDocx') || document.getElementById('btnExportDocx');
-      const originalHtml = btn ? btn.innerHTML : '';
-      if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<span>⏳</span> <span>جاري تحضير ملف Word...</span>';
-      }
-
-      try {
-        const { docxBlob, docxFile, fileName, docxMimeType } = await generateDocxBlob();
-
-        let shareInvoked = false;
-
-        // Native System Share Sheet (Standard behavior like all mobile apps)
-        if (navigator.share) {
-          let fileToShare = docxFile;
-          if (navigator.canShare) {
-            if (!navigator.canShare({ files: [docxFile] })) {
-              const octetFile = new File([docxBlob], fileName, {
-                type: 'application/octet-stream',
-                lastModified: Date.now()
-              });
-              if (navigator.canShare({ files: [octetFile] })) {
-                fileToShare = octetFile;
-              }
-            }
-          }
-
-          try {
-            // Share ONLY the file object so native apps (WhatsApp, Telegram, etc.)
-            // receive the authentic .docx document attachment with NO text replacement
-            await navigator.share({
-              files: [fileToShare]
-            });
-            shareInvoked = true;
-            showToast('تمت مشاركة ملف Word بنجاح!', '📲');
-          } catch (shareErr) {
-            if (shareErr.name === 'AbortError') {
-              // User dismissed or closed the native share drawer
-              shareInvoked = true;
-            } else {
-              console.warn('Native share error:', shareErr);
-            }
-          }
-        }
-
-        // Fallback for browsers without Web Share API file support (e.g. desktop PC)
-        if (!shareInvoked) {
-          downloadDocxFile(docxBlob, fileName, docxMimeType);
-          showToast('تم تنزيل ملف Word (.docx) في جهازك لعدم توفر المشاركة المباشرة في متصفحك', '📥', 4000);
-        }
-      } catch (err) {
-        console.error('Error generating DOCX:', err);
-        alert('حدث خطأ أثناء معالجة ملف Word: ' + err.message);
-      } finally {
-        if (btn) {
-          btn.disabled = false;
-          btn.innerHTML = originalHtml;
-        }
-      }
-    }
-
-    // Direct Download
-    async function handleDownloadDocx() {
-      if (items.length === 0) {
-        alert('أضف عناصر أولاً');
-        return;
-      }
-
-      const btn = document.getElementById('btnDownloadDocx');
-      const originalHtml = btn ? btn.innerHTML : '';
-      if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<span>⏳</span> <span>جاري إنشاء الملف...</span>';
-      }
-
-      try {
-        const { docxBlob, fileName, docxMimeType } = await generateDocxBlob();
-        downloadDocxFile(docxBlob, fileName, docxMimeType);
-        showToast('تم تنزيل ملف Word (.docx) بنجاح في مجلد التنزيلات', '📥', 4000);
-      } catch (err) {
-        console.error('Error downloading DOCX:', err);
-        alert('حدث خطأ أثناء تنزيل ملف Word: ' + err.message);
-      } finally {
-        if (btn) {
-          btn.disabled = false;
-          btn.innerHTML = originalHtml;
-        }
-      }
-    }
-
-    const btnShareDocx = document.getElementById('btnShareDocx');
-    if (btnShareDocx) btnShareDocx.addEventListener('click', handleShareDocx);
-
-    const btnExportDocx = document.getElementById('btnExportDocx');
-    if (btnExportDocx) btnExportDocx.addEventListener('click', handleShareDocx);
-
-    const btnDownloadDocx = document.getElementById('btnDownloadDocx');
-    if (btnDownloadDocx) btnDownloadDocx.addEventListener('click', handleDownloadDocx);
-  </script>
+  <div id="installHelp" class="sheet-backdrop center hidden">
+    <div class="sheet">
+      <h3 data-i18n="installAppTitle">تثبيت التطبيق</h3>
+      <p id="installHelpBody" style="line-height:1.8;font-size:14px;color:var(--dim)"></p>
+      <div class="actions"><button class="primary" type="button" data-close-sheets data-i18n="ok">حسناً</button></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
 </body>
 </html>

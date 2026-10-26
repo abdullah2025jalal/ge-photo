@@ -1,41 +1,27 @@
-const CACHE_NAME = 'photomagic-pwa-v8';
-const ASSETS = [
-  './manifest.json',
-  './icon-192.png',
-  './icon-512.png'
-];
+/* PhotoMagic PWA service worker.
+ *
+ * NETWORK-ONLY by design (same strategy as the Android companion's web
+ * build): every request goes straight to the network, so a new deploy is
+ * live the moment the page is opened. Nothing is ever served stale — the
+ * account node must always be read fresh from the Realtime Database.
+ *
+ * A registered worker with a fetch handler is what makes the site
+ * INSTALLABLE (install rectangle / native "Install app" prompt), which is
+ * the only reason this file exists.
+ */
 
-self.addEventListener('install', (e) => {
-  self.skipWaiting();
-  e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+self.addEventListener('install', () => self.skipWaiting());
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
+      .then(() => self.clients.claim()),
   );
 });
 
-self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.map((key) => {
-          if (key !== CACHE_NAME) return caches.delete(key);
-        })
-      );
-    }).then(() => self.clients.claim())
-  );
-});
-
-// Always Network-First (no cache) for index.html / HTML navigation so updates are 100% instant
-self.addEventListener('fetch', (e) => {
-  if (e.request.mode === 'navigate' || e.request.destination === 'document' || e.request.url.includes('index.html')) {
-    e.respondWith(
-      fetch(e.request).catch(() => caches.match('./index.html'))
-    );
-    return;
-  }
-
-  e.respondWith(
-    caches.match(e.request).then((cachedRes) => {
-      return cachedRes || fetch(e.request);
-    })
-  );
+self.addEventListener('fetch', (event) => {
+  // Pass-through: never cache, never rewrite.
+  event.respondWith(fetch(event.request));
 });
